@@ -34,6 +34,7 @@ super-shell -config otra.toml     # usa otro archivo
 | `sidebar_width` | `30`        | Ancho del panel lateral (16-80)                  |
 | `scrollback`    | `10000`     | Líneas de historial por shell (1-100000)         |
 | `restore_tabs`  | `true`      | Reabrir las pestañas de la sesión anterior       |
+| `restore_command` | `type`    | Programa que corría cada pestaña al salir: `type` lo deja escrito, `run` lo ejecuta, `off` lo ignora |
 | `colors.accent` | adaptativo  | Color principal en hex (`#9D7CFF`)               |
 | `colors.muted`  | adaptativo  | Color secundario en hex                          |
 
@@ -67,8 +68,12 @@ Cualquier otra tecla va directo al shell.
 - Una pestaña nueva abre en el directorio de la pestaña activa.
 - Al salir con `Ctrl+] q` se guardan las pestañas abiertas (directorio y
   nombre) en `~/.local/state/super-shell/tabs.json` y se reabren al volver a
-  iniciar. Los programas en ejecución y el historial no se restauran. Si se
+  iniciar. Si se
   cierra la última pestaña, el archivo se borra y el próximo inicio es limpio.
+- Si una pestaña tenía un programa corriendo al salir (por ejemplo
+  `npm run dev`), al reabrirla queda escrito en el prompt para relanzarlo con
+  Enter. Con `restore_command = "run"` se ejecuta solo; con `"off"` se ignora.
+  El historial de la pantalla no se restaura.
 
 ## Historial (scrollback)
 

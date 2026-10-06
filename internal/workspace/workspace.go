@@ -61,9 +61,19 @@ func New(shellPath string, scrollback, cols, rows int) (*Workspace, error) {
 	return w, nil
 }
 
-// Restore starts one tab per saved entry (directory and name) and activates
-// the saved tab. With no usable entries it behaves like New.
-func Restore(st State, shellPath string, scrollback, cols, rows int) (*Workspace, error) {
+// Replay says what Restore does with the program a tab was running.
+type Replay int
+
+const (
+	ReplayOff  Replay = iota // ignore it
+	ReplayType               // type it at the prompt; Enter runs it
+	ReplayRun                // type it and run it
+)
+
+// Restore starts one tab per saved entry (directory and name), replays the
+// program each one was running per replay, and activates the saved tab.
+// With no usable entries it behaves like New.
+func Restore(st State, replay Replay, shellPath string, scrollback, cols, rows int) (*Workspace, error) {
 	if len(st.Tabs) == 0 {
 		return New(shellPath, scrollback, cols, rows)
 	}
@@ -79,9 +89,36 @@ func Restore(st State, shellPath string, scrollback, cols, rows int) (*Workspace
 			w.Close()
 			return nil, err
 		}
+		if t.Cmd != "" && replay != ReplayOff {
+			line := t.Cmd
+			if replay == ReplayRun {
+				line += "\r"
+			}
+			go typeWhenReady(w.Active(), line)
+		}
 	}
 	w.Select(st.Active)
 	return w, nil
+}
+
+// typeWhenReady writes line to the shell once its startup output (rc file
+// messages, the first prompt) has gone quiet, so the line lands at the prompt
+// instead of being echoed before it.
+func typeWhenReady(s *shell.Session, line string) {
+	const quiet, poll, limit = 150 * time.Millisecond, 20 * time.Millisecond, 3 * time.Second
+	var last uint64
+	stable := time.Duration(0)
+	for waited := time.Duration(0); waited < limit; waited += poll {
+		time.Sleep(poll)
+		if n := s.Outputs(); n == 0 || n != last {
+			last, stable = n, 0
+			continue
+		}
+		if stable += poll; stable >= quiet {
+			break
+		}
+	}
+	_, _ = s.Write([]byte(line))
 }
 
 // ErrTooManyTabs is returned by NewTab when MaxTabs are open.
