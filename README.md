@@ -13,14 +13,37 @@ go build -o super-shell .
 ./super-shell -shell /bin/zsh
 ```
 
-## Atajos (prefijo `Ctrl+]`)
+## Configuración
+
+Archivo TOML en `~/.config/super-shell/config.toml` (Linux) o
+`~/Library/Application Support/super-shell/config.toml` (macOS):
+
+```sh
+super-shell -init-config          # crea el archivo comentado con los valores por defecto
+super-shell -config otra.toml     # usa otro archivo
+```
+
+| Clave           | Por defecto | Descripción                                      |
+|-----------------|-------------|--------------------------------------------------|
+| `shell`         | `$SHELL`    | Shell a ejecutar (`-shell` lo sobrescribe)       |
+| `prefix`        | `ctrl+]`    | Prefijo: `ctrl+a`…`ctrl+z`, `ctrl+\`, `ctrl+]`, `ctrl+^`, `ctrl+_` |
+| `sidebar`       | `true`      | Mostrar el panel lateral al iniciar              |
+| `sidebar_width` | `30`        | Ancho del panel lateral (16-80)                  |
+| `scrollback`    | `10000`     | Líneas de historial por shell (1-100000)         |
+| `colors.accent` | adaptativo  | Color principal en hex (`#9D7CFF`)               |
+| `colors.muted`  | adaptativo  | Color secundario en hex                          |
+
+Un valor inválido o una clave desconocida detienen el arranque con un error
+que indica el archivo y la clave.
+
+## Atajos (prefijo `Ctrl+]`, configurable)
 
 | Tecla        | Acción                       |
 |--------------|------------------------------|
 | `Ctrl+] ?`   | Mostrar/ocultar ayuda        |
 | `Ctrl+] s`   | Mostrar/ocultar panel lateral|
 | `Ctrl+] q`   | Salir                        |
-| `Ctrl+] ]`   | Enviar `Ctrl+]` al shell     |
+| `Ctrl+] Ctrl+]` | Enviar `Ctrl+]` al shell  |
 
 Cualquier otra tecla va directo al shell.
 

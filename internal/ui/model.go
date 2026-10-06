@@ -26,10 +26,21 @@ type screenMsg struct{}
 
 type exitMsg struct{ err error }
 
+// Options are the user settings the model needs.
+type Options struct {
+	ShellPath    string
+	PrefixLabel  string // e.g. "Ctrl+]"
+	ShowSidebar  bool
+	SidebarWidth int
+	Accent       string // hex, empty for the default
+	Muted        string
+}
+
 // Model is the root Bubble Tea model.
 type Model struct {
-	sess      *shell.Session
-	shellPath string
+	sess   *shell.Session
+	opts   Options
+	styles styles
 
 	width, height int
 	showSidebar   bool
@@ -47,8 +58,13 @@ type Model struct {
 }
 
 // New builds the model around a running shell session.
-func New(sess *shell.Session, shellPath string) *Model {
-	return &Model{sess: sess, shellPath: shellPath, showSidebar: true}
+func New(sess *shell.Session, opts Options) *Model {
+	return &Model{
+		sess:        sess,
+		opts:        opts,
+		styles:      newStyles(opts.Accent, opts.Muted),
+		showSidebar: opts.ShowSidebar,
+	}
 }
 
 func (m *Model) Init() tea.Cmd { return m.waitScreen() }
@@ -107,7 +123,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *Model) paneSize() (cols, rows int) {
 	cols = m.width - 2 // pane border
 	if m.showSidebar {
-		cols -= sidebarWidth + 2
+		cols -= m.opts.SidebarWidth + 2
 	}
 	rows = m.height - 2 - 2 // header + status, pane border
 	return max(cols, 1), max(rows, 1)
@@ -126,55 +142,58 @@ func (m *Model) View() string {
 	}
 	cols, rows := m.paneSize()
 
+	st, pfx := m.styles, m.opts.PrefixLabel
+	bar := func(style lipgloss.Style, text string) string {
+		return style.Width(m.width).MaxWidth(m.width).Render(text)
+	}
+
 	title := "Super Shell"
 	if t := m.sess.Title(); t != "" {
 		title += " · " + t
 	}
-	header := headerStyle.Width(m.width).MaxWidth(m.width).Render(title)
+	header := bar(st.header, title)
 
-	pane := paneStyle.Width(cols).Height(rows).Render(m.sess.Render(true))
+	pane := st.pane.Width(cols).Height(rows).Render(m.sess.Render(true))
 	body := pane
 	if m.showSidebar {
-		side := sidebarStyle.Width(sidebarWidth).Height(rows).Render(m.sidebar())
+		side := st.sidebar.Width(m.opts.SidebarWidth).Height(rows).Render(m.sidebar())
 		body = lipgloss.JoinHorizontal(lipgloss.Top, side, pane)
 	}
 
-	hint := "Ctrl+] ? ayuda · Ctrl+] s panel · Ctrl+] q salir · Shift+PgUp historial"
-	status := statusStyle.Width(m.width).MaxWidth(m.width).Render(hint)
+	status := bar(st.status, fmt.Sprintf("%[1]s ? ayuda · %[1]s s panel · %[1]s q salir · Shift+PgUp historial", pfx))
 	if m.flash != "" {
-		status = scrollStyle.Width(m.width).MaxWidth(m.width).Render(m.flash)
+		status = bar(st.scroll, m.flash)
 	} else if m.prefixArmed {
-		status = armedStyle.Width(m.width).MaxWidth(m.width).
-			Render("Ctrl+] … ?  ayuda · s  panel · q  salir · ]  enviar Ctrl+] · otra tecla cancela")
+		status = bar(st.armed, fmt.Sprintf("%[1]s … ?  ayuda · s  panel · q  salir · %[1]s  enviar %[1]s · otra tecla cancela", pfx))
 	} else if off, history := m.sess.ScrollOffset(); off > 0 {
-		status = scrollStyle.Width(m.width).MaxWidth(m.width).
-			Render(fmt.Sprintf("Historial: %d/%d líneas arriba · Shift+PgDn bajar · cualquier tecla vuelve", off, history))
+		status = bar(st.scroll, fmt.Sprintf("Historial: %d/%d líneas arriba · Shift+PgDn bajar · cualquier tecla vuelve", off, history))
 	}
 
 	return lipgloss.JoinVertical(lipgloss.Left, header, body, status)
 }
 
 func (m *Model) sidebar() string {
+	st, pfx := m.styles, m.opts.PrefixLabel
 	if m.showHelp {
 		return strings.Join([]string{
-			labelStyle.Render("Atajos (prefijo Ctrl+])"),
+			st.label.Render("Atajos (prefijo " + pfx + ")"),
 			"",
 			"?  mostrar/ocultar ayuda",
 			"s  mostrar/ocultar panel",
 			"q  salir",
+			pfx + "  enviarlo al shell",
 			"",
-			labelStyle.Render("Historial"),
+			st.label.Render("Historial"),
 			"",
 			"Shift+PgUp / Shift+PgDn",
 			"o la rueda del mouse.",
 			"",
-			labelStyle.Render("Copiar"),
+			st.label.Render("Copiar"),
 			"",
 			"Arrastra con el mouse;",
 			"se copia al soltar.",
-			"]  enviar Ctrl+] al shell",
 			"",
-			labelStyle.Render("En el shell"),
+			st.label.Render("En el shell"),
 			"",
 			"Todo lo demás va en bruto",
 			"al PTY: Tab, ↑/↓, Ctrl+R,",
@@ -182,11 +201,11 @@ func (m *Model) sidebar() string {
 		}, "\n")
 	}
 	cols, rows := m.sess.Size()
-	w := sidebarWidth - 2
+	w := m.opts.SidebarWidth - 2
 	line := func(k, v string) string {
-		return labelStyle.Render(k) + "\n" + valueStyle.Render(truncLeft(v, w)) + "\n"
+		return st.label.Render(k) + "\n" + st.value.Render(truncLeft(v, w)) + "\n"
 	}
-	return line("Shell", m.shellPath) +
+	return line("Shell", m.opts.ShellPath) +
 		line("PID", fmt.Sprint(m.sess.Pid())) +
 		line("Tamaño", fmt.Sprintf("%dx%d", cols, rows)) +
 		line("Directorio", m.cwd)

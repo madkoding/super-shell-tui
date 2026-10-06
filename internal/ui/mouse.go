@@ -18,7 +18,7 @@ const wheelLines = 3
 func (m *Model) paneOrigin() (x, y int) {
 	x = 1 // pane border
 	if m.showSidebar {
-		x += sidebarWidth + 2
+		x += m.opts.SidebarWidth + 2
 	}
 	return x, 2 // header + pane border
 }

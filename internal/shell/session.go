@@ -17,9 +17,6 @@ import (
 	"github.com/creack/pty"
 )
 
-// ScrollbackLines is how many lines scrolled off the top are kept.
-const ScrollbackLines = 10000
-
 // Session is a shell process attached to a PTY plus its emulated screen.
 type Session struct {
 	cmd *exec.Cmd
@@ -44,8 +41,9 @@ type Session struct {
 	err     error
 }
 
-// Start launches shellPath (e.g. /bin/bash) in a new PTY of cols x rows.
-func Start(shellPath string, cols, rows int) (*Session, error) {
+// Start launches shellPath (e.g. /bin/bash) in a new PTY of cols x rows,
+// keeping up to scrollback lines of history.
+func Start(shellPath string, cols, rows, scrollback int) (*Session, error) {
 	if cols < 1 {
 		cols = 80
 	}
@@ -72,7 +70,7 @@ func Start(shellPath string, cols, rows int) (*Session, error) {
 	s.cursorVisible.Store(true)
 
 	s.emu = vt.NewEmulator(cols, rows)
-	s.emu.SetScrollbackSize(ScrollbackLines)
+	s.emu.SetScrollbackSize(scrollback)
 	s.emu.SetCallbacks(vt.Callbacks{
 		Title:            func(t string) { s.title = t },
 		AltScreen:        func(on bool) { s.altScreen.Store(on) },
