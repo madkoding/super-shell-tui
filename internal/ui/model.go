@@ -17,6 +17,11 @@ import (
 // ActionMsg carries a prefix-key action from the input pump.
 type ActionMsg input.Action
 
+// MouseMsg carries a mouse report from the input pump.
+type MouseMsg input.MouseEvent
+
+type clearFlashMsg struct{ id int }
+
 type screenMsg struct{}
 
 type exitMsg struct{ err error }
@@ -31,6 +36,12 @@ type Model struct {
 	showHelp      bool
 	prefixArmed   bool
 	cwd           string
+	selecting     bool   // left button held for a selection
+	flash         string // transient status message
+	flashID       int
+
+	// Clipboard copies text to the system clipboard (OSC 52 by default).
+	Clipboard func(string)
 
 	Err error
 }
@@ -64,6 +75,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case exitMsg:
 		m.Err = msg.err
 		return m, tea.Quit
+	case MouseMsg:
+		return m, m.handleMouse(input.MouseEvent(msg))
+	case clearFlashMsg:
+		if msg.id == m.flashID {
+			m.flash = ""
+		}
 	case ActionMsg:
 		switch input.Action(msg) {
 		case input.ActionPrefixArmed:
@@ -124,7 +141,9 @@ func (m *Model) View() string {
 
 	hint := "Ctrl+] ? ayuda · Ctrl+] s panel · Ctrl+] q salir · Shift+PgUp historial"
 	status := statusStyle.Width(m.width).MaxWidth(m.width).Render(hint)
-	if m.prefixArmed {
+	if m.flash != "" {
+		status = scrollStyle.Width(m.width).MaxWidth(m.width).Render(m.flash)
+	} else if m.prefixArmed {
 		status = armedStyle.Width(m.width).MaxWidth(m.width).
 			Render("Ctrl+] … ?  ayuda · s  panel · q  salir · ]  enviar Ctrl+] · otra tecla cancela")
 	} else if off, history := m.sess.ScrollOffset(); off > 0 {
@@ -147,7 +166,12 @@ func (m *Model) sidebar() string {
 			labelStyle.Render("Historial"),
 			"",
 			"Shift+PgUp / Shift+PgDn",
-			"desplazan el historial.",
+			"o la rueda del mouse.",
+			"",
+			labelStyle.Render("Copiar"),
+			"",
+			"Arrastra con el mouse;",
+			"se copia al soltar.",
 			"]  enviar Ctrl+] al shell",
 			"",
 			labelStyle.Render("En el shell"),

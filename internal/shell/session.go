@@ -30,11 +30,14 @@ type Session struct {
 	cols, rows int
 	scroll     int // lines scrolled back into history; 0 = live view
 	title      string
+	sel        selection
 
 	appCursor     atomic.Bool
 	bracketed     atomic.Bool
 	cursorVisible atomic.Bool
 	altScreen     atomic.Bool
+	mouseMode     atomic.Int32 // inner mouse tracking: 0, 9, 1000, 1002 or 1003
+	mouseSGR      atomic.Bool
 
 	updates chan struct{}
 	done    chan struct{}
@@ -92,6 +95,15 @@ func (s *Session) setMode(m ansi.Mode, on bool) {
 		s.appCursor.Store(on)
 	case ansi.ModeBracketedPaste:
 		s.bracketed.Store(on)
+	case ansi.ModeMouseExtSgr:
+		s.mouseSGR.Store(on)
+	case ansi.ModeMouseX10, ansi.ModeMouseNormal, ansi.ModeMouseButtonEvent, ansi.ModeMouseAnyEvent:
+		code := int32(m.Mode())
+		if on {
+			s.mouseMode.Store(code)
+		} else {
+			s.mouseMode.CompareAndSwap(code, 0)
+		}
 	}
 }
 
