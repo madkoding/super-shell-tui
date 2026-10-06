@@ -9,34 +9,59 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/madkoding/super-shell-tui/internal/input"
+	"github.com/madkoding/super-shell-tui/internal/workspace"
 )
 
 // wheelLines is how far one wheel notch scrolls.
 const wheelLines = 3
 
-// paneOrigin returns the screen cell of the shell pane's top-left cell.
-func (m *Model) paneOrigin() (x, y int) {
-	x = 1 // pane border
-	if m.showSidebar {
-		x += m.opts.SidebarWidth + 2
+// paneAt returns the pane under screen cell (sx, sy) and the cell's
+// position inside it; inside is false on borders and outside every pane.
+func (m *Model) paneAt(sx, sy int) (p workspace.Pane, x, y int, inside bool) {
+	ox, oy := m.areaOrigin()
+	for _, p := range m.ws.Panes() {
+		x, y := sx-ox-p.X-1, sy-oy-p.Y-1 // 1 = pane border
+		if x >= -1 && y >= -1 && x <= p.W-2 && y <= p.H-2 {
+			cols, rows := p.Inner()
+			return p, x, y, x >= 0 && y >= 0 && x < cols && y < rows
+		}
 	}
-	return x, 2 // header + pane border
+	return workspace.Pane{}, -1, -1, false
 }
 
-// handleMouse routes a mouse report: to the program in the shell when it
-// tracks the mouse, otherwise to scrollback and text selection.
+// handleMouse routes a mouse report: a click focuses the pane under it, then
+// the report goes to the program in the shell when it tracks the mouse,
+// otherwise to scrollback and text selection.
 func (m *Model) handleMouse(ev input.MouseEvent) tea.Cmd {
-	ox, oy := m.paneOrigin()
-	cols, rows := m.paneSize()
-	x, y := ev.X-ox, ev.Y-oy
-	inside := x >= 0 && y >= 0 && x < cols && y < rows
-
 	// A left click on the header switches tabs.
 	if ev.Y == 0 && ev.Button() == 0 && !ev.Motion() && !ev.Release && ev.Wheel() == 0 {
 		if i := m.tabAt(ev.X); i >= 0 {
 			m.switchTab(func() { m.ws.Select(i) })
 		}
 		return nil
+	}
+
+	p, x, y, inside := m.paneAt(ev.X, ev.Y)
+	press := ev.Wheel() == 0 && !ev.Motion() && !ev.Release
+	if press && p.Sess != nil && !p.Active && !m.selecting {
+		m.changeFocus(func() { m.ws.Focus(p.Sess) })
+	}
+	if w := ev.Wheel(); w != 0 && p.Sess != nil && !p.Active {
+		// The wheel scrolls the pane under the pointer, focused or not.
+		if inside && !p.Sess.WantsMouse() && !p.Sess.AltScreen() {
+			p.Sess.ScrollBy(-w * wheelLines)
+		}
+		return nil
+	}
+	if p.Sess != m.sess {
+		// Drags leaving the focused pane keep selecting in it, clamped.
+		ox, oy := m.areaOrigin()
+		for _, q := range m.ws.Panes() {
+			if q.Active {
+				x, y = ev.X-ox-q.X-1, ev.Y-oy-q.Y-1
+			}
+		}
+		inside = false
 	}
 
 	if m.sess.WantsMouse() && !m.selecting {

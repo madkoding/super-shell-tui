@@ -52,7 +52,10 @@ que indica el archivo y la clave.
 | `Ctrl+] n` / `Ctrl+] p` | Pestaña siguiente / anterior |
 | `Ctrl+] 1`…`9` | Ir a la pestaña N          |
 | `Ctrl+] r`   | Renombrar la pestaña (Enter guarda, Esc cancela, vacío = automático) |
-| `Ctrl+] x`   | Cerrar la pestaña (pide confirmación con `y`) |
+| `Ctrl+] x`   | Cerrar el panel, o la pestaña si tiene uno solo (pide confirmación con `y`) |
+| `Ctrl+] \|` / `Ctrl+] %` | Dividir el panel a la derecha |
+| `Ctrl+] -` / `Ctrl+] "` | Dividir el panel hacia abajo |
+| `Ctrl+] o`   | Siguiente panel              |
 | `Ctrl+] /`   | Buscar en el historial       |
 | `Ctrl+] Ctrl+]` | Enviar `Ctrl+]` al shell  |
 
@@ -74,6 +77,16 @@ Cualquier otra tecla va directo al shell.
   `npm run dev`), al reabrirla queda escrito en el prompt para relanzarlo con
   Enter. Con `restore_command = "run"` se ejecuta solo; con `"off"` se ignora.
   El historial de la pantalla no se restaura.
+
+## Paneles
+
+- Cada pestaña se puede dividir en paneles (`Ctrl+] |` a la derecha,
+  `Ctrl+] -` hacia abajo); el nuevo shell abre en el mismo directorio.
+- El panel activo tiene el borde de color; cambia con `Ctrl+] o` o con un
+  click. La rueda del mouse desplaza el panel que está bajo el puntero.
+- Al salir de un shell su panel desaparece y el vecino ocupa su lugar.
+- Las divisiones no se guardan entre sesiones: cada pestaña se restaura con
+  el directorio de su panel activo.
 
 ## Historial (scrollback)
 

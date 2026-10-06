@@ -30,6 +30,9 @@ const (
 	ActionRenameTab
 	ActionCloseTab
 	ActionSearch
+	ActionSplitRight // new pane side by side
+	ActionSplitDown  // new pane below
+	ActionNextPane
 )
 
 // ActionSelectTab is the first of nine actions selecting tabs 1..9
@@ -144,6 +147,12 @@ func (t *Translator) Feed(chunk []byte) (out []byte, actions []Action) {
 				actions = append(actions, ActionCloseTab)
 			case '/':
 				actions = append(actions, ActionSearch)
+			case '|', '%':
+				actions = append(actions, ActionSplitRight)
+			case '-', '"':
+				actions = append(actions, ActionSplitDown)
+			case 'o':
+				actions = append(actions, ActionNextPane)
 			case '1', '2', '3', '4', '5', '6', '7', '8', '9':
 				actions = append(actions, ActionSelectTab+Action(c-'1'))
 			case t.Prefix:

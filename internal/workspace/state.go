@@ -9,7 +9,8 @@ import (
 )
 
 // State is what is saved between runs: each tab's directory, name and the
-// program running in it, and the active tab. History is not restored.
+// program running in it (from its focused pane), and the active tab. Splits
+// and history are not restored.
 type State struct {
 	Tabs   []SavedTab `json:"tabs"`
 	Active int        `json:"active"`
@@ -29,9 +30,9 @@ func (w *Workspace) Snapshot() State {
 	st := State{Active: w.active}
 	for _, t := range w.tabs {
 		st.Tabs = append(st.Tabs, SavedTab{
-			Dir:  t.sess.Cwd(),
+			Dir:  t.focus.Cwd(),
 			Name: t.name,
-			Cmd:  t.sess.ForegroundCommand(),
+			Cmd:  t.focus.ForegroundCommand(),
 		})
 	}
 	return st
