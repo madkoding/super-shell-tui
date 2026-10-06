@@ -186,6 +186,14 @@ func (w *Workspace) RenameActive(name string) {
 	w.notify()
 }
 
+// CloseActive terminates the active tab's shell; its tab disappears once
+// the shell exits, like a regular exit.
+func (w *Workspace) CloseActive() {
+	if s := w.Active(); s != nil {
+		_ = s.Close()
+	}
+}
+
 // Next and Prev cycle through tabs.
 func (w *Workspace) Next() { w.cycle(1) }
 func (w *Workspace) Prev() { w.cycle(-1) }

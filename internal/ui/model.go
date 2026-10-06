@@ -52,6 +52,7 @@ type Model struct {
 	flashID       int
 	renaming      bool
 	renameBuf     []rune
+	confirmClose  bool // waiting for y/n before closing the active tab
 
 	// Clipboard copies text to the system clipboard (OSC 52 by default).
 	Clipboard func(string)
@@ -91,8 +92,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cwd = m.sess.Cwd()
 		return m, m.waitScreen()
 	case TextMsg:
-		if m.renaming {
+		switch {
+		case m.renaming:
 			m.handleRenameInput(msg)
+		case m.confirmClose:
+			m.handleCloseInput(msg)
 		}
 	case MouseMsg:
 		return m, m.handleMouse(input.MouseEvent(msg))
@@ -119,6 +123,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.switchTab(m.ws.Prev)
 		case input.ActionRenameTab:
 			m.startRename()
+		case input.ActionCloseTab:
+			m.startClose()
 		default:
 			if i := input.Action(msg).SelectedTab(); i >= 0 {
 				m.switchTab(func() { m.ws.Select(i) })
@@ -177,10 +183,12 @@ func (m *Model) View() string {
 	status := bar(st.status, fmt.Sprintf("%[1]s ? ayuda · %[1]s s panel · %[1]s q salir · Shift+PgUp historial", pfx))
 	if m.renaming {
 		status = bar(st.armed, "Nombre de la pestaña: "+string(m.renameBuf)+"█  · Enter guardar · Esc cancelar · vacío = automático")
+	} else if m.confirmClose {
+		status = bar(st.armed, fmt.Sprintf("¿Cerrar la pestaña %d y terminar su shell? y = sí · cualquier otra tecla = no", m.ws.ActiveIndex()+1))
 	} else if m.flash != "" {
 		status = bar(st.scroll, m.flash)
 	} else if m.prefixArmed {
-		status = bar(st.armed, fmt.Sprintf("%[1]s … ?  ayuda · c  nueva pestaña · n/p  cambiar · 1-9  ir · r  renombrar · s  panel · q  salir · %[1]s  enviar %[1]s", pfx))
+		status = bar(st.armed, fmt.Sprintf("%[1]s … ?  ayuda · c  nueva · x  cerrar · n/p  cambiar · 1-9  ir · r  renombrar · s  panel · q  salir · %[1]s  enviar %[1]s", pfx))
 	} else if off, history := m.sess.ScrollOffset(); off > 0 {
 		status = bar(st.scroll, fmt.Sprintf("Historial: %d/%d líneas arriba · Shift+PgDn bajar · cualquier tecla vuelve", off, history))
 	}
@@ -201,6 +209,7 @@ func (m *Model) sidebar() string {
 			"n / p  siguiente / anterior",
 			"1-9  ir a la pestaña",
 			"r  renombrar pestaña",
+			"x  cerrar pestaña",
 			pfx + "  enviarlo al shell",
 			"",
 			st.label.Render("Historial"),
@@ -236,6 +245,9 @@ func (m *Model) sidebar() string {
 func (m *Model) switchTab(change func()) {
 	if m.renaming {
 		m.endRename(false)
+	}
+	if m.confirmClose {
+		m.endClose(false)
 	}
 	m.selecting = false
 	m.sess.ClearSelection()

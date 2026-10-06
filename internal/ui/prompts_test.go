@@ -28,3 +28,13 @@ func TestHandleRenameInput(t *testing.T) {
 		t.Fatalf("renaming %v captured %v", m.renaming, captured)
 	}
 }
+
+func TestHandleCloseInputCancels(t *testing.T) {
+	var captured []bool
+	m := &Model{SetCapture: func(on bool) { captured = append(captured, on) }}
+	m.startClose()
+	m.handleCloseInput([]byte("n")) // any key but y/s cancels; ws is never touched
+	if m.confirmClose || len(captured) != 2 || captured[1] {
+		t.Fatalf("confirm %v captured %v", m.confirmClose, captured)
+	}
+}
