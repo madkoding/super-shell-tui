@@ -7,40 +7,59 @@
 // history navigation and reverse search.
 package input
 
-// Action is a TUI command triggered via the prefix key.
+import "bytes"
+
+// Action is a TUI command triggered via the prefix key or a reserved key.
 type Action int
 
 const (
 	ActionQuit Action = iota + 1
 	ActionToggleSidebar
 	ActionToggleHelp
+	ActionScrollPageUp   // Shift+PgUp
+	ActionScrollPageDown // Shift+PgDn
+	ActionScrollReset    // any key sent to the shell returns to the live view
 )
 
 // DefaultPrefix is Ctrl+] (0x1d), rarely used by shells or editors.
 const DefaultPrefix byte = 0x1d
 
+// Sequences the TUI keeps for itself (xterm encoding of Shift+PgUp/PgDn).
+var (
+	seqShiftPgUp = []byte("\x1b[5;2~")
+	seqShiftPgDn = []byte("\x1b[6;2~")
+)
+
+// State is what the translator needs to know about the inner terminal.
+type State interface {
+	// AppCursorMode reports DECCKM; arrows are then rewritten to SS3 form.
+	AppCursorMode() bool
+	// AltScreen reports a full-screen app, which gets Shift+PgUp/PgDn itself.
+	AltScreen() bool
+}
+
 // Translator turns raw stdin chunks into bytes for the PTY plus TUI actions.
 type Translator struct {
 	Prefix byte
-	// AppCursor reports whether the shell enabled application cursor mode
-	// (DECCKM); arrows are then rewritten from CSI to SS3 form.
-	AppCursor func() bool
+	State  State // may be nil
 
 	armed bool
 }
 
 // NewTranslator returns a Translator using prefix (0 means DefaultPrefix).
-func NewTranslator(prefix byte, appCursor func() bool) *Translator {
+func NewTranslator(prefix byte, state State) *Translator {
 	if prefix == 0 {
 		prefix = DefaultPrefix
 	}
-	return &Translator{Prefix: prefix, AppCursor: appCursor}
+	return &Translator{Prefix: prefix, State: state}
 }
 
 // Feed processes one chunk read from the real terminal.
 func (t *Translator) Feed(chunk []byte) (out []byte, actions []Action) {
 	out = make([]byte, 0, len(chunk))
-	for _, c := range chunk {
+	alt := t.State != nil && t.State.AltScreen()
+	for i := 0; i < len(chunk); i++ {
+		c := chunk[i]
 		if t.armed {
 			t.armed = false
 			switch c {
@@ -59,10 +78,26 @@ func (t *Translator) Feed(chunk []byte) (out []byte, actions []Action) {
 			t.armed = true
 			continue
 		}
+		if c == 0x1b && !alt {
+			rest := chunk[i:]
+			switch {
+			case bytes.HasPrefix(rest, seqShiftPgUp):
+				actions = append(actions, ActionScrollPageUp)
+				i += len(seqShiftPgUp) - 1
+				continue
+			case bytes.HasPrefix(rest, seqShiftPgDn):
+				actions = append(actions, ActionScrollPageDown)
+				i += len(seqShiftPgDn) - 1
+				continue
+			}
+		}
 		out = append(out, c)
 	}
-	if t.AppCursor != nil && t.AppCursor() {
-		out = toSS3(out)
+	if len(out) > 0 {
+		actions = append([]Action{ActionScrollReset}, actions...)
+		if t.State != nil && t.State.AppCursorMode() {
+			out = toSS3(out)
+		}
 	}
 	return out, actions
 }

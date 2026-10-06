@@ -55,9 +55,20 @@ func run() error {
 	model := ui.New(sess, *shellPath)
 	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithInput(nil))
 
-	tr := input.NewTranslator(input.DefaultPrefix, sess.AppCursorMode)
+	tr := input.NewTranslator(input.DefaultPrefix, sess)
 	go func() {
-		_ = input.Pump(os.Stdin, sess, tr, func(a input.Action) { p.Send(ui.ActionMsg(a)) })
+		_ = input.Pump(os.Stdin, sess, tr, func(a input.Action) {
+			switch a {
+			case input.ActionScrollPageUp:
+				sess.ScrollPage(1)
+			case input.ActionScrollPageDown:
+				sess.ScrollPage(-1)
+			case input.ActionScrollReset:
+				sess.ResetScroll()
+			default:
+				p.Send(ui.ActionMsg(a))
+			}
+		})
 	}()
 
 	if _, err := p.Run(); err != nil {
