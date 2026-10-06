@@ -21,7 +21,22 @@ const (
 	ActionScrollReset    // any key sent to the shell returns to the live view
 	ActionPrefixArmed    // prefix pressed, waiting for a command key
 	ActionPrefixDone     // the key after the prefix was consumed
+	ActionNewTab
+	ActionNextTab
+	ActionPrevTab
 )
+
+// ActionSelectTab is the first of nine actions selecting tabs 1..9
+// (ActionSelectTab+0 is tab 1).
+const ActionSelectTab Action = 100
+
+// SelectedTab returns the 0-based tab an action selects, or -1.
+func (a Action) SelectedTab() int {
+	if a >= ActionSelectTab && a < ActionSelectTab+9 {
+		return int(a - ActionSelectTab)
+	}
+	return -1
+}
 
 // DefaultPrefix is Ctrl+] (0x1d), rarely used by shells or editors.
 const DefaultPrefix byte = 0x1d
@@ -103,6 +118,14 @@ func (t *Translator) Feed(chunk []byte) (out []byte, actions []Action) {
 				actions = append(actions, ActionToggleSidebar)
 			case '?', 'h':
 				actions = append(actions, ActionToggleHelp)
+			case 'c':
+				actions = append(actions, ActionNewTab)
+			case 'n':
+				actions = append(actions, ActionNextTab)
+			case 'p':
+				actions = append(actions, ActionPrevTab)
+			case '1', '2', '3', '4', '5', '6', '7', '8', '9':
+				actions = append(actions, ActionSelectTab+Action(c-'1'))
 			case t.Prefix:
 				out = append(out, t.Prefix) // double prefix sends it literally
 			}

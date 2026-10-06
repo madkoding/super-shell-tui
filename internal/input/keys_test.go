@@ -140,3 +140,13 @@ func TestFeedMouse(t *testing.T) {
 		t.Fatalf("bad helpers: %+v", got)
 	}
 }
+
+func TestFeedTabCommands(t *testing.T) {
+	tr := NewTranslator(0, nil)
+	_, acts := tr.Feed([]byte{DefaultPrefix, 'c', DefaultPrefix, 'n', DefaultPrefix, 'p', DefaultPrefix, '3'})
+	got := commands(acts)
+	want := []Action{ActionNewTab, ActionNextTab, ActionPrevTab, ActionSelectTab + 2}
+	if !slices.Equal(got, want) || got[3].SelectedTab() != 2 || ActionQuit.SelectedTab() != -1 {
+		t.Fatalf("got %v", got)
+	}
+}

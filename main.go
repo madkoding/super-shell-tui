@@ -14,8 +14,8 @@ import (
 
 	"github.com/madkoding/super-shell-tui/internal/config"
 	"github.com/madkoding/super-shell-tui/internal/input"
-	"github.com/madkoding/super-shell-tui/internal/shell"
 	"github.com/madkoding/super-shell-tui/internal/ui"
+	"github.com/madkoding/super-shell-tui/internal/workspace"
 )
 
 func main() {
@@ -56,11 +56,11 @@ func run() error {
 		cols, rows = 80, 24
 	}
 
-	sess, err := shell.Start(shellPath, cols, rows, cfg.Scrollback)
+	ws, err := workspace.New(shellPath, cfg.Scrollback, cols, rows)
 	if err != nil {
 		return fmt.Errorf("start shell: %w", err)
 	}
-	defer sess.Close()
+	defer ws.Close()
 
 	// Raw mode is set here, not by Bubble Tea: with WithInput(nil) the
 	// program never reads stdin, so every byte reaches the PTY untouched.
@@ -70,7 +70,7 @@ func run() error {
 	}
 	defer term.Restore(stdin, oldState) //nolint:errcheck
 
-	model := ui.New(sess, ui.Options{
+	model := ui.New(ws, ui.Options{
 		ShellPath:    shellPath,
 		PrefixLabel:  prefixLabel,
 		ShowSidebar:  cfg.Sidebar,
@@ -85,10 +85,14 @@ func run() error {
 	// wheel; the reports are decoded by input.Translator, not Bubble Tea.
 	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithInput(nil), tea.WithMouseCellMotion())
 
-	tr := input.NewTranslator(prefix, sess)
+	tr := input.NewTranslator(prefix, ws)
 	tr.OnMouse = func(ev input.MouseEvent) { p.Send(ui.MouseMsg(ev)) }
 	go func() {
-		_ = input.Pump(os.Stdin, sess, tr, func(a input.Action) {
+		_ = input.Pump(os.Stdin, ws, tr, func(a input.Action) {
+			sess := ws.Active()
+			if sess == nil {
+				return
+			}
 			switch a {
 			case input.ActionScrollPageUp:
 				sess.ScrollPage(1)
@@ -103,10 +107,8 @@ func run() error {
 		})
 	}()
 
-	if _, err := p.Run(); err != nil {
-		return err
-	}
-	return model.Err
+	_, err = p.Run()
+	return err
 }
 
 func firstNonEmpty(values ...string) string {
