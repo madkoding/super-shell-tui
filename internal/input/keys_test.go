@@ -6,10 +6,11 @@ import (
 	"testing"
 )
 
-type fakeState struct{ appCursor, alt bool }
+type fakeState struct{ appCursor, alt, bracketed bool }
 
-func (f fakeState) AppCursorMode() bool { return f.appCursor }
-func (f fakeState) AltScreen() bool     { return f.alt }
+func (f fakeState) AppCursorMode() bool  { return f.appCursor }
+func (f fakeState) AltScreen() bool      { return f.alt }
+func (f fakeState) BracketedPaste() bool { return f.bracketed }
 
 // commands drops the bookkeeping actions (scroll reset, prefix state).
 func commands(acts []Action) []Action {
@@ -68,6 +69,11 @@ func TestFeedAppCursorMode(t *testing.T) {
 	if string(out) != "\x1bOA\x1bOD\x1b[3~" {
 		t.Fatalf("got %q", out)
 	}
+	// Pasted text is never rewritten.
+	tr = NewTranslator(0, fakeState{appCursor: true, bracketed: true})
+	if out, _ := tr.Feed([]byte("\x1b[200~\x1b[A\x1b[201~")); string(out) != "\x1b[200~\x1b[A\x1b[201~" {
+		t.Fatalf("got %q", out)
+	}
 }
 
 func TestFeedScrollKeys(t *testing.T) {
@@ -81,6 +87,33 @@ func TestFeedScrollKeys(t *testing.T) {
 	tr = NewTranslator(0, fakeState{alt: true})
 	out, acts = tr.Feed([]byte("\x1b[5;2~"))
 	if string(out) != "\x1b[5;2~" || len(commands(acts)) != 0 {
+		t.Fatalf("got %q %v", out, acts)
+	}
+}
+
+func TestFeedBracketedPaste(t *testing.T) {
+	paste := "\x1b[200~echo a\necho \x1d q \x1b[5;2~\x1b[201~"
+
+	// Shell supports bracketed paste: markers and content pass untouched,
+	// and the prefix or scroll keys inside the paste are not interpreted.
+	tr := NewTranslator(0, fakeState{bracketed: true})
+	out, acts := tr.Feed([]byte(paste))
+	if string(out) != paste || len(commands(acts)) != 0 || tr.InPaste() {
+		t.Fatalf("got %q %v", out, acts)
+	}
+
+	// Shell without support: markers are stripped.
+	tr = NewTranslator(0, fakeState{})
+	out, _ = tr.Feed([]byte(paste))
+	if string(out) != "echo a\necho \x1d q \x1b[5;2~" {
+		t.Fatalf("got %q", out)
+	}
+
+	// Paste split across reads keeps its state.
+	tr = NewTranslator(0, fakeState{})
+	tr.Feed([]byte("\x1b[200~ab"))
+	out, acts = tr.Feed([]byte("\x1dq\x1b[201~"))
+	if string(out) != "\x1dq" || len(commands(acts)) != 0 {
 		t.Fatalf("got %q %v", out, acts)
 	}
 }

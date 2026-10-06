@@ -53,6 +53,8 @@ func run() error {
 	defer term.Restore(stdin, oldState) //nolint:errcheck
 
 	model := ui.New(sess, *shellPath)
+	// Bubble Tea enables bracketed paste on the real terminal by default;
+	// input.Translator forwards or strips the markers per the shell's mode.
 	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithInput(nil))
 
 	tr := input.NewTranslator(input.DefaultPrefix, sess)

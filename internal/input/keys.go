@@ -26,10 +26,13 @@ const (
 // DefaultPrefix is Ctrl+] (0x1d), rarely used by shells or editors.
 const DefaultPrefix byte = 0x1d
 
-// Sequences the TUI keeps for itself (xterm encoding of Shift+PgUp/PgDn).
+// Sequences the TUI keeps for itself (xterm encoding of Shift+PgUp/PgDn),
+// and the markers the outer terminal wraps pasted text with.
 var (
-	seqShiftPgUp = []byte("\x1b[5;2~")
-	seqShiftPgDn = []byte("\x1b[6;2~")
+	seqShiftPgUp  = []byte("\x1b[5;2~")
+	seqShiftPgDn  = []byte("\x1b[6;2~")
+	seqPasteStart = []byte("\x1b[200~")
+	seqPasteEnd   = []byte("\x1b[201~")
 )
 
 // State is what the translator needs to know about the inner terminal.
@@ -38,6 +41,9 @@ type State interface {
 	AppCursorMode() bool
 	// AltScreen reports a full-screen app, which gets Shift+PgUp/PgDn itself.
 	AltScreen() bool
+	// BracketedPaste reports whether the shell understands paste markers;
+	// when it doesn't, they are stripped so they never show up as garbage.
+	BracketedPaste() bool
 }
 
 // Translator turns raw stdin chunks into bytes for the PTY plus TUI actions.
@@ -45,7 +51,8 @@ type Translator struct {
 	Prefix byte
 	State  State // may be nil
 
-	armed bool
+	armed   bool
+	inPaste bool // between paste markers: content is never interpreted
 }
 
 // NewTranslator returns a Translator using prefix (0 means DefaultPrefix).
@@ -60,8 +67,30 @@ func NewTranslator(prefix byte, state State) *Translator {
 func (t *Translator) Feed(chunk []byte) (out []byte, actions []Action) {
 	out = make([]byte, 0, len(chunk))
 	alt := t.State != nil && t.State.AltScreen()
+	bracketed := t.State != nil && t.State.BracketedPaste()
+	appCursor := t.State != nil && t.State.AppCursorMode()
 	for i := 0; i < len(chunk); i++ {
 		c := chunk[i]
+		if c == 0x1b {
+			rest := chunk[i:]
+			marker := seqPasteStart
+			if t.inPaste {
+				marker = seqPasteEnd
+			}
+			if bytes.HasPrefix(rest, marker) {
+				t.inPaste = !t.inPaste
+				t.armed = false
+				if bracketed {
+					out = append(out, marker...)
+				}
+				i += len(marker) - 1
+				continue
+			}
+		}
+		if t.inPaste {
+			out = append(out, c)
+			continue
+		}
 		if t.armed {
 			t.armed = false
 			actions = append(actions, ActionPrefixDone)
@@ -95,31 +124,33 @@ func (t *Translator) Feed(chunk []byte) (out []byte, actions []Action) {
 				continue
 			}
 		}
+		if c == 0x1b && appCursor && isCSIArrow(chunk[i:]) {
+			out = append(out, 0x1b, 'O', chunk[i+2])
+			i += 2
+			continue
+		}
 		out = append(out, c)
 	}
 	if len(out) > 0 {
 		actions = append([]Action{ActionScrollReset}, actions...)
-		if t.State != nil && t.State.AppCursorMode() {
-			out = toSS3(out)
-		}
 	}
 	return out, actions
 }
 
+// InPaste reports whether a bracketed paste is in progress.
+func (t *Translator) InPaste() bool { return t.inPaste }
+
 // Armed reports whether the prefix key is waiting for a command.
 func (t *Translator) Armed() bool { return t.armed }
 
-// toSS3 rewrites ESC [ {A,B,C,D,H,F} to ESC O {A,B,C,D,H,F}.
-func toSS3(b []byte) []byte {
-	for i := 0; i+2 < len(b); i++ {
-		if b[i] != 0x1b || b[i+1] != '[' {
-			continue
-		}
-		switch b[i+2] {
-		case 'A', 'B', 'C', 'D', 'H', 'F':
-			b[i+1] = 'O'
-			i += 2
-		}
+// isCSIArrow matches ESC [ {A,B,C,D,H,F}, which DECCKM turns into SS3.
+func isCSIArrow(b []byte) bool {
+	if len(b) < 3 || b[0] != 0x1b || b[1] != '[' {
+		return false
 	}
-	return b
+	switch b[2] {
+	case 'A', 'B', 'C', 'D', 'H', 'F':
+		return true
+	}
+	return false
 }
