@@ -13,6 +13,9 @@ go build -o super-shell .
 ./super-shell -shell /bin/zsh
 ```
 
+Funciona en Linux y macOS. En macOS el directorio de cada pestaña se obtiene
+con `lsof`, que viene con el sistema.
+
 ## Configuración
 
 Archivo TOML en `~/.config/super-shell/config.toml` (Linux) o

@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -17,6 +16,9 @@ import (
 	"github.com/charmbracelet/x/vt"
 	"github.com/creack/pty"
 )
+
+// cwdTTL is how long a looked-up working directory is reused.
+const cwdTTL = 500 * time.Millisecond
 
 // Session is a shell process attached to a PTY plus its emulated screen.
 type Session struct {
@@ -38,6 +40,10 @@ type Session struct {
 	mouseSGR      atomic.Bool
 	outputs       atomic.Uint64 // chunks read from the shell, for activity marks
 	resizedAt     atomic.Int64  // unix nanos of the last effective resize
+
+	cwdMu sync.Mutex // guards cwd and cwdAt
+	cwd   string
+	cwdAt time.Time
 
 	updates chan struct{}
 	done    chan struct{}
@@ -212,13 +218,17 @@ func (s *Session) Title() string {
 	return s.title
 }
 
-// Cwd returns the shell's working directory (Linux only, best effort).
+// Cwd returns the shell's working directory (best effort, "" if unknown).
+// The lookup can be slow on some systems (macOS runs lsof), so the value is
+// cached briefly: it is read on every redraw for tab titles.
 func (s *Session) Cwd() string {
-	dir, err := os.Readlink("/proc/" + strconv.Itoa(s.Pid()) + "/cwd")
-	if err != nil {
-		return ""
+	s.cwdMu.Lock()
+	defer s.cwdMu.Unlock()
+	if time.Since(s.cwdAt) < cwdTTL {
+		return s.cwd
 	}
-	return dir
+	s.cwd, s.cwdAt = processCwd(s.Pid()), time.Now()
+	return s.cwd
 }
 
 // ScrollBy moves the view n lines back into history (negative goes forward).
