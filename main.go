@@ -56,7 +56,12 @@ func run() error {
 		cols, rows = 80, 24
 	}
 
-	ws, err := workspace.New(shellPath, cfg.Scrollback, cols, rows)
+	var saved workspace.State
+	statePath := workspace.StatePath()
+	if cfg.RestoreTabs {
+		saved = workspace.LoadState(statePath)
+	}
+	ws, err := workspace.Restore(saved, shellPath, cfg.Scrollback, cols, rows)
 	if err != nil {
 		return fmt.Errorf("start shell: %w", err)
 	}
@@ -110,6 +115,12 @@ func run() error {
 	}()
 
 	_, err = p.Run()
+	if cfg.RestoreTabs {
+		// Save the tabs still open (none if the last shell exited).
+		if serr := workspace.SaveState(statePath, ws.Snapshot()); serr != nil && err == nil {
+			err = fmt.Errorf("save tabs: %w", serr)
+		}
+	}
 	return err
 }
 

@@ -61,11 +61,44 @@ func New(shellPath string, scrollback, cols, rows int) (*Workspace, error) {
 	return w, nil
 }
 
+// Restore starts one tab per saved entry (directory and name) and activates
+// the saved tab. With no usable entries it behaves like New.
+func Restore(st State, shellPath string, scrollback, cols, rows int) (*Workspace, error) {
+	if len(st.Tabs) == 0 {
+		return New(shellPath, scrollback, cols, rows)
+	}
+	w := &Workspace{
+		shellPath:  shellPath,
+		scrollback: scrollback,
+		cols:       cols,
+		rows:       rows,
+		changed:    make(chan struct{}, 1),
+	}
+	for _, t := range st.Tabs[:min(len(st.Tabs), MaxTabs)] {
+		if err := w.NewTabAt(t.Dir, t.Name); err != nil {
+			w.Close()
+			return nil, err
+		}
+	}
+	w.Select(st.Active)
+	return w, nil
+}
+
 // ErrTooManyTabs is returned by NewTab when MaxTabs are open.
 var ErrTooManyTabs = errors.New("too many tabs")
 
-// NewTab starts a shell in a new tab and activates it.
+// NewTab starts a shell in a new tab and activates it. The shell starts in
+// the active tab's directory, like most terminals do.
 func (w *Workspace) NewTab() error {
+	dir := ""
+	if s := w.Active(); s != nil {
+		dir = s.Cwd()
+	}
+	return w.NewTabAt(dir, "")
+}
+
+// NewTabAt starts a shell in dir with the given tab name ("" = automatic).
+func (w *Workspace) NewTabAt(dir, name string) error {
 	w.mu.Lock()
 	if len(w.tabs) >= MaxTabs {
 		w.mu.Unlock()
@@ -74,11 +107,11 @@ func (w *Workspace) NewTab() error {
 	cols, rows := w.cols, w.rows
 	w.mu.Unlock()
 
-	sess, err := shell.Start(w.shellPath, cols, rows, w.scrollback)
+	sess, err := shell.Start(w.shellPath, dir, cols, rows, w.scrollback)
 	if err != nil {
 		return err
 	}
-	t := &tab{sess: sess}
+	t := &tab{sess: sess, name: name}
 	w.mu.Lock()
 	w.tabs = append(w.tabs, t)
 	w.active = len(w.tabs) - 1
