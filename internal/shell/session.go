@@ -25,12 +25,14 @@ type Session struct {
 	cmd *exec.Cmd
 	pty *os.File
 
-	mu         sync.Mutex // guards emu, cols, rows, scroll, title
+	mu         sync.Mutex // guards emu, cols, rows, scroll, title, sel and search
 	emu        *vt.Emulator
 	cols, rows int
 	scroll     int // lines scrolled back into history; 0 = live view
 	title      string
 	sel        selection
+	searching  bool // a search is in progress; found is its current match
+	found      point
 
 	appCursor     atomic.Bool
 	bracketed     atomic.Bool

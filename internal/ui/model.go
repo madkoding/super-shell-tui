@@ -53,6 +53,9 @@ type Model struct {
 	renaming      bool
 	renameBuf     []rune
 	confirmClose  bool // waiting for y/n before closing the active tab
+	searching     bool // typing a scrollback search
+	searchBuf     []rune
+	searchMiss    bool // the last search found nothing
 
 	// Clipboard copies text to the system clipboard (OSC 52 by default).
 	Clipboard func(string)
@@ -97,6 +100,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.handleRenameInput(msg)
 		case m.confirmClose:
 			m.handleCloseInput(msg)
+		case m.searching:
+			m.handleSearchInput(msg)
 		}
 	case MouseMsg:
 		return m, m.handleMouse(input.MouseEvent(msg))
@@ -125,6 +130,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.startRename()
 		case input.ActionCloseTab:
 			m.startClose()
+		case input.ActionSearch:
+			return m, m.startSearch()
 		default:
 			if i := input.Action(msg).SelectedTab(); i >= 0 {
 				m.switchTab(func() { m.ws.Select(i) })
@@ -185,10 +192,16 @@ func (m *Model) View() string {
 		status = bar(st.armed, "Nombre de la pestaña: "+string(m.renameBuf)+"█  · Enter guardar · Esc cancelar · vacío = automático")
 	} else if m.confirmClose {
 		status = bar(st.armed, fmt.Sprintf("¿Cerrar la pestaña %d y terminar su shell? y = sí · cualquier otra tecla = no", m.ws.ActiveIndex()+1))
+	} else if m.searching {
+		miss := ""
+		if m.searchMiss {
+			miss = "  (sin coincidencias)"
+		}
+		status = bar(st.armed, "Buscar: "+string(m.searchBuf)+"█"+miss+"  · ↑/↓ anterior/siguiente · Enter quedarse aquí · Esc cancelar")
 	} else if m.flash != "" {
 		status = bar(st.scroll, m.flash)
 	} else if m.prefixArmed {
-		status = bar(st.armed, fmt.Sprintf("%[1]s … ?  ayuda · c  nueva · x  cerrar · n/p  cambiar · 1-9  ir · r  renombrar · s  panel · q  salir · %[1]s  enviar %[1]s", pfx))
+		status = bar(st.armed, fmt.Sprintf("%[1]s … ?  ayuda · c  nueva · x  cerrar · n/p  cambiar · 1-9  ir · r  renombrar · /  buscar · s  panel · q  salir · %[1]s  enviar %[1]s", pfx))
 	} else if off, history := m.sess.ScrollOffset(); off > 0 {
 		status = bar(st.scroll, fmt.Sprintf("Historial: %d/%d líneas arriba · Shift+PgDn bajar · cualquier tecla vuelve", off, history))
 	}
@@ -210,12 +223,15 @@ func (m *Model) sidebar() string {
 			"1-9  ir a la pestaña",
 			"r  renombrar pestaña",
 			"x  cerrar pestaña",
+			"/  buscar en el historial",
 			pfx + "  enviarlo al shell",
 			"",
 			st.label.Render("Historial"),
 			"",
 			"Shift+PgUp / Shift+PgDn",
 			"o la rueda del mouse.",
+			"Prefijo + / busca texto;",
+			"↑/↓ salta entre resultados.",
 			"",
 			st.label.Render("Copiar"),
 			"",
@@ -248,6 +264,9 @@ func (m *Model) switchTab(change func()) {
 	}
 	if m.confirmClose {
 		m.endClose(false)
+	}
+	if m.searching {
+		m.endSearch(false)
 	}
 	m.selecting = false
 	m.sess.ClearSelection()
