@@ -87,6 +87,8 @@ func run() error {
 
 	tr := input.NewTranslator(prefix, ws)
 	tr.OnMouse = func(ev input.MouseEvent) { p.Send(ui.MouseMsg(ev)) }
+	tr.OnCapture = func(b []byte) { p.Send(ui.TextMsg(b)) }
+	model.SetCapture = tr.Capture.Store
 	go func() {
 		_ = input.Pump(os.Stdin, ws, tr, func(a input.Action) {
 			sess := ws.Active()
