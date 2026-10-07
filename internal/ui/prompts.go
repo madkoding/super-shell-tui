@@ -62,7 +62,13 @@ func (m *Model) handleRenameInput(b []byte) {
 	}
 }
 
+// startClose closes an idle shell at once and asks first when a program
+// is running in it.
 func (m *Model) startClose() {
+	if m.sess != nil && !m.sess.Busy() {
+		m.ws.CloseActive()
+		return
+	}
 	m.confirmClose = true
 	if m.SetCapture != nil {
 		m.SetCapture(true)

@@ -263,7 +263,11 @@ func (m *Model) View() string {
 		if m.ws.PaneCount() > 1 {
 			what = "este panel"
 		}
-		status = bar(st.armed, "¿Cerrar "+what+" y terminar su shell? y = sí · cualquier otra tecla = no")
+		running := "su shell"
+		if cmd := m.sess.ForegroundCommand(); cmd != "" {
+			running = cmd
+		}
+		status = bar(st.armed, "¿Cerrar "+what+" y terminar "+running+"? y = sí · cualquier otra tecla = no")
 	} else if m.searching {
 		miss := ""
 		if m.searchMiss {
