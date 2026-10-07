@@ -3,7 +3,13 @@
 TUI en Go (Bubble Tea) que embebe un shell interactivo en un panel. Las teclas
 se envían **en bruto** al PTY, así que el autocompletado (Tab), el historial
 (↑/↓) y la búsqueda inversa (Ctrl+R) de bash funcionan igual que en una
-terminal normal.
+terminal normal. Organiza varios shells en pestañas y paneles, con un panel
+lateral de información y la sesión guardada al salir.
+
+![Super Shell TUI con dos pestañas y tres paneles](docs/screenshot.png)
+
+*Pestaña `código` con tres paneles: `git log`, uno renombrado `tests` y un
+servidor cuyo borde muestra el programa que corre (`python3`).*
 
 ## Instalación
 
@@ -104,6 +110,11 @@ reservados; la ayuda (`?`) muestra las teclas configuradas.
 
 Cualquier otra tecla va directo al shell.
 
+## Panel lateral
+
+`Ctrl+] s` lo muestra u oculta. Indica la pestaña activa y cuántos paneles
+tiene, y del panel activo el shell, su PID, el tamaño y el directorio.
+
 ## Pestañas
 
 - Hasta 9 shells abiertos; click en una pestaña de la cabecera para cambiar.
@@ -129,7 +140,8 @@ Cualquier otra tecla va directo al shell.
   `Ctrl+] h/j/k/l` hacia el panel vecino en esa dirección o con un
   click. La rueda del mouse desplaza el panel que está bajo el puntero.
 - Con varios paneles, el borde de cada uno muestra el programa que corre o,
-  si está libre, su directorio.
+  si está libre, su directorio. `Ctrl+] R` le pone un nombre fijo (vacío
+  vuelve al automático).
 - Al salir de un shell su panel desaparece y el vecino ocupa su lugar.
 - `Ctrl+] ←/→` mueve el borde vertical más cercano al panel activo y
   `Ctrl+] ↑/↓` el horizontal, un 10 % por pulsación. Después del primer
@@ -140,8 +152,8 @@ Cualquier otra tecla va directo al shell.
   `(zoom)`. Se vuelve al layout con `Ctrl+] z`, al cambiar de panel o al
   dividir.
 - Al salir se guardan también los paneles de cada pestaña (divisiones,
-  tamaños, directorio y programa de cada uno, y cuál estaba activo). El zoom
-  no se guarda.
+  tamaños, nombre, directorio y programa de cada uno, cuál estaba activo y
+  el zoom).
 
 ## Historial (scrollback)
 
@@ -174,8 +186,11 @@ Cualquier otra tecla va directo al shell.
 - `internal/shell`: lanza el shell en un PTY (`creack/pty`) y emula la
   pantalla con `charmbracelet/x/vt` (scrollback, caracteres anchos, modos
   del terminal); `Render` la convierte a texto con colores ANSI.
-- `internal/ui`: layout (cabecera, panel lateral, panel del shell, estado) y
-  redimensionado del PTY.
+- `internal/workspace`: pestañas como árboles de paneles (dividir, mover,
+  redimensionar) y guardado/restauración de la sesión en JSON.
+- `internal/config`: lectura y validación del TOML, incluidas las teclas.
+- `internal/ui`: layout (cabecera, panel lateral, paneles, estado),
+  prompts, ayuda y redimensionado de cada PTY.
 
 ## Tests
 
