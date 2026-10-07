@@ -216,3 +216,12 @@ func TestFeedResizeMode(t *testing.T) {
 		t.Fatalf("esc: out %q actions %v", out, acts)
 	}
 }
+
+func TestFeedSwapKeys(t *testing.T) {
+	tr := NewTranslator(0, nil)
+	out, acts := tr.Feed([]byte{DefaultPrefix, '}', DefaultPrefix, '{'})
+	want := []Action{ActionSwapPaneNext, ActionSwapPanePrev}
+	if len(out) != 0 || !slices.Equal(commands(acts), want) {
+		t.Fatalf("out %q actions %v", out, commands(acts))
+	}
+}
