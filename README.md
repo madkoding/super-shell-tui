@@ -125,6 +125,8 @@ Cualquier otra tecla va directo al shell.
 - El panel activo tiene el borde de color; cambia con `Ctrl+] o`, con
   `Ctrl+] h/j/k/l` hacia el panel vecino en esa dirección o con un
   click. La rueda del mouse desplaza el panel que está bajo el puntero.
+- Con varios paneles, el borde de cada uno muestra el programa que corre o,
+  si está libre, su directorio.
 - Al salir de un shell su panel desaparece y el vecino ocupa su lugar.
 - `Ctrl+] ←/→` mueve el borde vertical más cercano al panel activo y
   `Ctrl+] ↑/↓` el horizontal, un 10 % por pulsación. Después del primer

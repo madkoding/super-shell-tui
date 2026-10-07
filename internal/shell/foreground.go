@@ -1,8 +1,10 @@
 package shell
 
 import (
+	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
@@ -54,4 +56,26 @@ func shellJoin(args []string) string {
 		}
 	}
 	return strings.Join(quoted, " ")
+}
+
+// Label names what the shell is doing, for pane borders: the program in
+// the foreground, or the base name of the working directory when idle.
+// Like Cwd it is cached briefly because it is read on every redraw.
+func (s *Session) Label() string {
+	s.cwdMu.Lock()
+	if time.Since(s.labelAt) < cwdTTL {
+		defer s.cwdMu.Unlock()
+		return s.label
+	}
+	s.cwdMu.Unlock()
+	label := ""
+	if words := strings.Fields(s.ForegroundCommand()); len(words) > 0 {
+		label = filepath.Base(words[0])
+	} else if dir := s.Cwd(); dir != "" {
+		label = filepath.Base(dir)
+	}
+	s.cwdMu.Lock()
+	s.label, s.labelAt = label, time.Now()
+	s.cwdMu.Unlock()
+	return label
 }

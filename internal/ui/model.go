@@ -10,6 +10,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/madkoding/super-shell-tui/internal/input"
 	"github.com/madkoding/super-shell-tui/internal/shell"
@@ -227,6 +228,9 @@ func (m *Model) renderPanes() string {
 		cols, rows := p.Inner()
 		box := style.Width(cols).Height(rows).Render(p.Sess.Render(p.Active))
 		lines[i] = strings.Split(box, "\n")
+		if len(panes) > 1 { // a lone pane is already named by its tab
+			lines[i][0] = topBorder(style, p.W, p.Sess.Label())
+		}
 	}
 	// The panes tile the area, so each screen row is the concatenation of
 	// the boxes crossing it, left to right (layout order already is).
@@ -241,6 +245,19 @@ func (m *Model) renderPanes() string {
 		out[y] = b.String()
 	}
 	return lipgloss.NewStyle().MaxWidth(width).Render(strings.Join(out, "\n"))
+}
+
+// topBorder draws a pane's top border w cells wide with label set in it,
+// cut to fit.
+func topBorder(style lipgloss.Style, w int, label string) string {
+	b := style.GetBorderStyle()
+	inner := max(w-2, 0)
+	line := strings.Repeat(b.Top, inner)
+	if label != "" && inner >= 5 {
+		label = " " + ansi.Truncate(label, inner-3, "…") + " "
+		line = b.Top + label + strings.Repeat(b.Top, inner-1-ansi.StringWidth(label))
+	}
+	return lipgloss.NewStyle().Foreground(style.GetBorderTopForeground()).Render(b.TopLeft + line + b.TopRight)
 }
 
 func (m *Model) View() string {
