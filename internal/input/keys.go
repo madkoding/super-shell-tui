@@ -19,6 +19,8 @@ const (
 	ActionScrollPageUp   // Shift+PgUp
 	ActionScrollPageDown // Shift+PgDn
 	ActionScrollReset    // any key sent to the shell returns to the live view
+	ActionPrefixArmed    // prefix pressed, waiting for a command key
+	ActionPrefixDone     // the key after the prefix was consumed
 )
 
 // DefaultPrefix is Ctrl+] (0x1d), rarely used by shells or editors.
@@ -62,6 +64,7 @@ func (t *Translator) Feed(chunk []byte) (out []byte, actions []Action) {
 		c := chunk[i]
 		if t.armed {
 			t.armed = false
+			actions = append(actions, ActionPrefixDone)
 			switch c {
 			case 'q', 'Q':
 				actions = append(actions, ActionQuit)
@@ -76,6 +79,7 @@ func (t *Translator) Feed(chunk []byte) (out []byte, actions []Action) {
 		}
 		if c == t.Prefix {
 			t.armed = true
+			actions = append(actions, ActionPrefixArmed)
 			continue
 		}
 		if c == 0x1b && !alt {

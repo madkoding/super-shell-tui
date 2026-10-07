@@ -11,9 +11,11 @@ type fakeState struct{ appCursor, alt bool }
 func (f fakeState) AppCursorMode() bool { return f.appCursor }
 func (f fakeState) AltScreen() bool     { return f.alt }
 
-// commands drops ActionScrollReset, which accompanies every forwarded key.
+// commands drops the bookkeeping actions (scroll reset, prefix state).
 func commands(acts []Action) []Action {
-	return slices.DeleteFunc(slices.Clone(acts), func(a Action) bool { return a == ActionScrollReset })
+	return slices.DeleteFunc(slices.Clone(acts), func(a Action) bool {
+		return a == ActionScrollReset || a == ActionPrefixArmed || a == ActionPrefixDone
+	})
 }
 
 func TestFeedPassesReadlineKeysRaw(t *testing.T) {
@@ -47,10 +49,11 @@ func TestFeedPrefixCommands(t *testing.T) {
 		t.Fatalf("got %q %v", out, acts)
 	}
 	// Prefix split across reads.
-	if out, _ := tr.Feed([]byte{DefaultPrefix}); len(out) != 0 || !tr.Armed() {
-		t.Fatalf("prefix should arm, got %q", out)
+	if out, acts := tr.Feed([]byte{DefaultPrefix}); len(out) != 0 || !tr.Armed() ||
+		!slices.Equal(acts, []Action{ActionPrefixArmed}) {
+		t.Fatalf("prefix should arm, got %q %v", out, acts)
 	}
-	if _, acts := tr.Feed([]byte{'s'}); !slices.Equal(acts, []Action{ActionToggleSidebar}) {
+	if _, acts := tr.Feed([]byte{'s'}); !slices.Equal(acts, []Action{ActionPrefixDone, ActionToggleSidebar}) {
 		t.Fatalf("got %v", acts)
 	}
 	// Double prefix sends a literal one.
