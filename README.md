@@ -72,6 +72,7 @@ que indica el archivo y la clave.
 | `Ctrl+] 1`…`9` | Ir a la pestaña N          |
 | `Ctrl+] r`   | Renombrar la pestaña (Enter guarda, Esc cancela, vacío = automático) |
 | `Ctrl+] x`   | Cerrar la pestaña (pide confirmación con `y`) |
+| `Ctrl+] /`   | Buscar en el historial       |
 | `Ctrl+] Ctrl+]` | Enviar `Ctrl+]` al shell  |
 
 Cualquier otra tecla va directo al shell.
@@ -95,6 +96,10 @@ Cualquier otra tecla va directo al shell.
 - Cualquier tecla enviada al shell vuelve a la vista en vivo.
 - La rueda del mouse también desplaza el historial (en `less`/`man` envía ↑/↓).
 - En apps de pantalla completa (vim, less) esas teclas van a la app.
+- `Ctrl+] /` busca texto mientras escribes, desde lo más reciente. `↑` o
+  `Ctrl+R` salta a la coincidencia anterior, `↓` o `Ctrl+S` a la siguiente,
+  `Enter` deja la vista ahí y `Esc` vuelve a la vista en vivo. Ignora
+  mayúsculas salvo que la búsqueda tenga alguna.
 
 ## Mouse y portapapeles
 
