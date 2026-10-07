@@ -110,8 +110,10 @@ Cualquier otra tecla va directo al shell.
   click. La rueda del mouse desplaza el panel que está bajo el puntero.
 - Al salir de un shell su panel desaparece y el vecino ocupa su lugar.
 - `Ctrl+] ←/→` mueve el borde vertical más cercano al panel activo y
-  `Ctrl+] ↑/↓` el horizontal, un 10 % por pulsación. También se puede
-  arrastrar el borde entre dos paneles con el mouse.
+  `Ctrl+] ↑/↓` el horizontal, un 10 % por pulsación. Después del primer
+  ajuste queda el modo tamaño: más flechas (o `H` `J` `K` `L`) siguen
+  moviendo el borde sin repetir el prefijo; `Enter`, `Esc` o cualquier otra
+  tecla lo terminan. También se puede arrastrar el borde con el mouse.
 - `Ctrl+] z` agranda el panel activo a toda el área; la pestaña muestra
   `(zoom)`. Se vuelve al layout con `Ctrl+] z`, al cambiar de panel o al
   dividir.

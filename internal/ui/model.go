@@ -47,6 +47,7 @@ type Model struct {
 	showSidebar   bool
 	showHelp      bool
 	prefixArmed   bool
+	resizeMode    bool // arrows and H/J/K/L resize until another key
 	cwd           string
 	selecting     bool // left button held for a selection
 	dragging      *workspace.Divider
@@ -117,6 +118,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.prefixArmed = true
 		case input.ActionPrefixDone:
 			m.prefixArmed = false
+			m.resizeMode = false
+		case input.ActionResizeMode:
+			m.resizeMode = true
 		case input.ActionQuit:
 			return m, tea.Quit
 		case input.ActionNewTab:
@@ -268,6 +272,8 @@ func (m *Model) View() string {
 		status = bar(st.armed, "Buscar: "+string(m.searchBuf)+"█"+miss+"  · ↑/↓ anterior/siguiente · Enter quedarse aquí · Esc cancelar")
 	} else if m.flash != "" {
 		status = bar(st.scroll, m.flash)
+	} else if m.resizeMode {
+		status = bar(st.armed, "Tamaño: flechas o H/J/K/L mueven el borde · Enter/Esc o cualquier otra tecla terminan")
 	} else if m.prefixArmed {
 		status = bar(st.armed, fmt.Sprintf("%[1]s … ?  ayuda · c  nueva · x  cerrar · n/p  cambiar · 1-9  ir · r  renombrar · /  buscar · |/-  dividir · o/hjkl  panel · z  zoom · flechas  tamaño · s  panel · q  salir · %[1]s  enviar %[1]s", pfx))
 	} else if off, history := m.sess.ScrollOffset(); off > 0 {
@@ -297,7 +303,9 @@ func (m *Model) sidebar() string {
 			"h j k l  panel en esa dirección",
 			"z  zoom del panel",
 			"flechas  cambiar tamaño",
-			"(o arrastra el borde)",
+			"(se repiten sin prefijo;",
+			"Esc termina, o arrastra",
+			"el borde con el mouse)",
 			"/  buscar en el historial",
 			pfx + "  enviarlo al shell",
 			"",
