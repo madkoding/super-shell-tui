@@ -44,9 +44,11 @@ type Session struct {
 	outputs       atomic.Uint64 // chunks read from the shell, for activity marks
 	resizedAt     atomic.Int64  // unix nanos of the last effective resize
 
-	cwdMu sync.Mutex // guards cwd and cwdAt
-	cwd   string
-	cwdAt time.Time
+	cwdMu   sync.Mutex // guards cwd, cwdAt, label and labelAt
+	cwd     string
+	cwdAt   time.Time
+	label   string
+	labelAt time.Time
 
 	updates chan struct{}
 	done    chan struct{}

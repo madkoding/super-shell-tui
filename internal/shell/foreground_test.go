@@ -52,3 +52,23 @@ func waitIdle(t *testing.T, s *Session) {
 		time.Sleep(20 * time.Millisecond)
 	}
 }
+
+func TestLabel(t *testing.T) {
+	s, err := Start(testShell, "/", 80, 24, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	waitIdle(t, s)
+	if got := s.Label(); got != "/" {
+		t.Fatalf("idle label = %q, want /", got)
+	}
+	_, _ = s.Write([]byte("sleep 30\n"))
+	deadline := time.Now().Add(3 * time.Second)
+	for s.Label() != "sleep" {
+		if time.Now().After(deadline) {
+			t.Fatalf("label = %q, want sleep", s.Label())
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
