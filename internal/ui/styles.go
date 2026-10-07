@@ -9,9 +9,21 @@ type styles struct {
 	label, value                  lipgloss.Style
 }
 
-func newStyles(accentHex, mutedHex string) styles {
-	var accent, muted lipgloss.TerminalColor = lipgloss.AdaptiveColor{Light: "#5A3FC0", Dark: "#9D7CFF"},
-		lipgloss.AdaptiveColor{Light: "#6B6B6B", Dark: "#8A8A8A"}
+// themed returns c as is for theme "auto" (lipgloss picks by the terminal
+// background) or its fixed light or dark variant.
+func themed(c lipgloss.AdaptiveColor, theme string) lipgloss.TerminalColor {
+	switch theme {
+	case "light":
+		return lipgloss.Color(c.Light)
+	case "dark":
+		return lipgloss.Color(c.Dark)
+	}
+	return c
+}
+
+func newStyles(accentHex, mutedHex, theme string) styles {
+	accent := themed(lipgloss.AdaptiveColor{Light: "#5A3FC0", Dark: "#9D7CFF"}, theme)
+	muted := themed(lipgloss.AdaptiveColor{Light: "#6B6B6B", Dark: "#8A8A8A"}, theme)
 	if accentHex != "" {
 		accent = lipgloss.Color(accentHex)
 	}
