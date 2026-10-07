@@ -102,6 +102,9 @@ func remove(root, leaf *node) *node {
 
 // panes lays out tab t in the current area. Caller holds w.mu.
 func (w *Workspace) panes(t *tab) []Pane {
+	if t.root == nil { // its last pane exited while another watcher relaid it out
+		return nil
+	}
 	ps := layout(t.root, 0, 0, w.width, w.height, nil)
 	for i := range ps {
 		ps[i].Active = ps[i].Sess == t.focus
