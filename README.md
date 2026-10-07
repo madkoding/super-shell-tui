@@ -114,6 +114,8 @@ Cualquier otra tecla va directo al shell.
 
 `Ctrl+] s` lo muestra u oculta. Indica la pestaña activa y cuántos paneles
 tiene, y del panel activo el shell, su PID, el tamaño y el directorio.
+`Ctrl+] ?` muestra ahí la ayuda; si no cabe en la pantalla, la rueda del
+mouse sobre el panel la desplaza.
 
 ## Pestañas
 
