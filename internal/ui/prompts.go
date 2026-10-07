@@ -1,5 +1,8 @@
 package ui
 
+// Status-bar prompts that capture keyboard input: tab rename and close
+// confirmation.
+
 import (
 	"unicode"
 	"unicode/utf8"
@@ -56,5 +59,32 @@ func (m *Model) handleRenameInput(b []byte) {
 		case unicode.IsPrint(r) && len(m.renameBuf) < maxTabName:
 			m.renameBuf = append(m.renameBuf, r)
 		}
+	}
+}
+
+func (m *Model) startClose() {
+	m.confirmClose = true
+	if m.SetCapture != nil {
+		m.SetCapture(true)
+	}
+}
+
+func (m *Model) endClose(close bool) {
+	m.confirmClose = false
+	if m.SetCapture != nil {
+		m.SetCapture(false)
+	}
+	if close {
+		m.ws.CloseActive()
+	}
+}
+
+// handleCloseInput confirms with y/Y (or s/S, "sí"); anything else cancels.
+func (m *Model) handleCloseInput(b []byte) {
+	switch string(b) {
+	case "y", "Y", "s", "S":
+		m.endClose(true)
+	default:
+		m.endClose(false)
 	}
 }

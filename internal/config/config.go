@@ -27,6 +27,8 @@ type Config struct {
 	SidebarWidth int `toml:"sidebar_width"`
 	// Scrollback is how many history lines each shell keeps (1-100000).
 	Scrollback int `toml:"scrollback"`
+	// RestoreTabs reopens the previous run's tabs (directory and name).
+	RestoreTabs bool `toml:"restore_tabs"`
 	// Colors are hex values ("#9D7CFF"); empty keeps the adaptive defaults.
 	Colors Colors `toml:"colors"`
 }
@@ -44,6 +46,7 @@ func Default() Config {
 		Sidebar:      true,
 		SidebarWidth: 30,
 		Scrollback:   10000,
+		RestoreTabs:  true,
 	}
 }
 
@@ -139,6 +142,9 @@ sidebar_width = 30
 
 # History lines kept per shell (1-100000).
 scrollback = 10000
+
+# Reopen the previous run's tabs (directory and name) on start.
+restore_tabs = true
 
 [colors]
 # Hex colors; leave empty for the defaults that adapt to light/dark terminals.
