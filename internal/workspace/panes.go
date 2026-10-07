@@ -225,7 +225,7 @@ func (w *Workspace) Split(vertical bool) error {
 		}
 		rows = cur.H - cur.H/2 - 2
 	}
-	sess, err := shell.Start(w.shellPath, cur.Sess.Cwd(), cols, rows, w.scrollback)
+	sess, err := shell.Start(w.shellPath, cur.Sess.FreshCwd(), cols, rows, w.scrollback)
 	if err != nil {
 		return err
 	}
