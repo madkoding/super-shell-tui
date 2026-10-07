@@ -29,6 +29,7 @@ type Model struct {
 	width, height int
 	showSidebar   bool
 	showHelp      bool
+	prefixArmed   bool
 	cwd           string
 
 	Err error
@@ -65,6 +66,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case ActionMsg:
 		switch input.Action(msg) {
+		case input.ActionPrefixArmed:
+			m.prefixArmed = true
+		case input.ActionPrefixDone:
+			m.prefixArmed = false
 		case input.ActionQuit:
 			return m, tea.Quit
 		case input.ActionToggleSidebar:
@@ -117,8 +122,15 @@ func (m *Model) View() string {
 		body = lipgloss.JoinHorizontal(lipgloss.Top, side, pane)
 	}
 
-	status := statusStyle.Width(m.width).MaxWidth(m.width).
-		Render("Ctrl+] ? ayuda · Ctrl+] s panel · Ctrl+] q salir")
+	hint := "Ctrl+] ? ayuda · Ctrl+] s panel · Ctrl+] q salir · Shift+PgUp historial"
+	status := statusStyle.Width(m.width).MaxWidth(m.width).Render(hint)
+	if m.prefixArmed {
+		status = armedStyle.Width(m.width).MaxWidth(m.width).
+			Render("Ctrl+] … ?  ayuda · s  panel · q  salir · ]  enviar Ctrl+] · otra tecla cancela")
+	} else if off, history := m.sess.ScrollOffset(); off > 0 {
+		status = scrollStyle.Width(m.width).MaxWidth(m.width).
+			Render(fmt.Sprintf("Historial: %d/%d líneas arriba · Shift+PgDn bajar · cualquier tecla vuelve", off, history))
+	}
 
 	return lipgloss.JoinVertical(lipgloss.Left, header, body, status)
 }
@@ -131,6 +143,11 @@ func (m *Model) sidebar() string {
 			"?  mostrar/ocultar ayuda",
 			"s  mostrar/ocultar panel",
 			"q  salir",
+			"",
+			labelStyle.Render("Historial"),
+			"",
+			"Shift+PgUp / Shift+PgDn",
+			"desplazan el historial.",
 			"]  enviar Ctrl+] al shell",
 			"",
 			labelStyle.Render("En el shell"),

@@ -1,5 +1,6 @@
 // Package shell runs an interactive shell inside a PTY and keeps a virtual
-// terminal (vt10x) in sync with its output so the UI can render it as a pane.
+// terminal (charmbracelet/x/vt) in sync with its output so the UI can render
+// it as a pane, including scrollback and wide characters.
 package shell
 
 import (
@@ -9,19 +10,31 @@ import (
 	"os/exec"
 	"strconv"
 	"sync"
+	"sync/atomic"
 
+	"github.com/charmbracelet/x/ansi"
+	"github.com/charmbracelet/x/vt"
 	"github.com/creack/pty"
-	"github.com/hinshun/vt10x"
 )
+
+// ScrollbackLines is how many lines scrolled off the top are kept.
+const ScrollbackLines = 10000
 
 // Session is a shell process attached to a PTY plus its emulated screen.
 type Session struct {
-	cmd  *exec.Cmd
-	pty  *os.File
-	term vt10x.Terminal
+	cmd *exec.Cmd
+	pty *os.File
 
-	mu         sync.Mutex
+	mu         sync.Mutex // guards emu, cols, rows, scroll, title
+	emu        *vt.Emulator
 	cols, rows int
+	scroll     int // lines scrolled back into history; 0 = live view
+	title      string
+
+	appCursor     atomic.Bool
+	bracketed     atomic.Bool
+	cursorVisible atomic.Bool
+	altScreen     atomic.Bool
 
 	updates chan struct{}
 	done    chan struct{}
@@ -53,25 +66,44 @@ func Start(shellPath string, cols, rows int) (*Session, error) {
 		updates: make(chan struct{}, 1),
 		done:    make(chan struct{}),
 	}
-	// Terminal replies (cursor position reports, device attributes) go back
-	// to the shell through the PTY, as a real terminal would do.
-	s.term = vt10x.New(vt10x.WithWriter(f), vt10x.WithSize(cols, rows))
+	s.cursorVisible.Store(true)
 
+	s.emu = vt.NewEmulator(cols, rows)
+	s.emu.SetScrollbackSize(ScrollbackLines)
+	s.emu.SetCallbacks(vt.Callbacks{
+		Title:            func(t string) { s.title = t },
+		AltScreen:        func(on bool) { s.altScreen.Store(on) },
+		CursorVisibility: func(v bool) { s.cursorVisible.Store(v) },
+		EnableMode:       func(m ansi.Mode) { s.setMode(m, true) },
+		DisableMode:      func(m ansi.Mode) { s.setMode(m, false) },
+	})
+
+	// Terminal replies (cursor position reports, device attributes) go back
+	// to the shell through the PTY, as a real terminal would do. The
+	// emulator's reply pipe is synchronous, so it must always be drained.
+	go func() { _, _ = io.Copy(f, s.emu) }()
 	go s.readLoop()
 	return s, nil
+}
+
+func (s *Session) setMode(m ansi.Mode, on bool) {
+	switch m {
+	case ansi.ModeCursorKeys:
+		s.appCursor.Store(on)
+	case ansi.ModeBracketedPaste:
+		s.bracketed.Store(on)
+	}
 }
 
 func (s *Session) readLoop() {
 	defer close(s.done)
 	buf := make([]byte, 32*1024)
-	pending := 0 // bytes of an incomplete UTF-8 rune kept from the last read
 	for {
-		n, err := s.pty.Read(buf[pending:])
+		n, err := s.pty.Read(buf)
 		if n > 0 {
-			total := pending + n
-			// vt10x stops before a rune split across reads; carry it over.
-			w, _ := s.term.Write(buf[:total])
-			pending = copy(buf, buf[w:total])
+			s.mu.Lock()
+			_, _ = s.emu.Write(buf[:n])
+			s.mu.Unlock()
 			s.notify()
 		}
 		if err != nil {
@@ -125,9 +157,10 @@ func (s *Session) Resize(cols, rows int) error {
 		return nil
 	}
 	s.cols, s.rows = cols, rows
+	s.emu.Resize(cols, rows)
+	s.scroll = min(s.scroll, s.emu.ScrollbackLen())
 	s.mu.Unlock()
 
-	s.term.Resize(cols, rows)
 	err := pty.Setsize(s.pty, &pty.Winsize{Cols: uint16(cols), Rows: uint16(rows)})
 	s.notify()
 	return err
@@ -135,17 +168,19 @@ func (s *Session) Resize(cols, rows int) error {
 
 // AppCursorMode reports whether the shell enabled application cursor keys
 // (DECCKM). Arrow keys must then be sent as SS3 (ESC O A) instead of CSI.
-func (s *Session) AppCursorMode() bool {
-	s.term.Lock()
-	defer s.term.Unlock()
-	return s.term.Mode()&vt10x.ModeAppCursor != 0
-}
+func (s *Session) AppCursorMode() bool { return s.appCursor.Load() }
+
+// BracketedPaste reports whether the shell enabled bracketed paste (?2004).
+func (s *Session) BracketedPaste() bool { return s.bracketed.Load() }
+
+// AltScreen reports whether a full-screen app (vim, less…) is running.
+func (s *Session) AltScreen() bool { return s.altScreen.Load() }
 
 // Title returns the window title set by the shell (OSC 0/2).
 func (s *Session) Title() string {
-	s.term.Lock()
-	defer s.term.Unlock()
-	return s.term.Title()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.title
 }
 
 // Cwd returns the shell's working directory (Linux only, best effort).
@@ -157,10 +192,49 @@ func (s *Session) Cwd() string {
 	return dir
 }
 
+// ScrollBy moves the view n lines back into history (negative goes forward).
+// The alternate screen has no history, so it always stays live.
+func (s *Session) ScrollBy(n int) {
+	s.mu.Lock()
+	if s.altScreen.Load() {
+		s.scroll = 0
+	} else {
+		s.scroll = max(0, min(s.scroll+n, s.emu.ScrollbackLen()))
+	}
+	s.mu.Unlock()
+	s.notify()
+}
+
+// ScrollPage scrolls by whole pages (positive goes back in history).
+func (s *Session) ScrollPage(pages int) {
+	_, rows := s.Size()
+	s.ScrollBy(pages * max(rows-1, 1))
+}
+
+// ResetScroll returns to the live view.
+func (s *Session) ResetScroll() {
+	s.mu.Lock()
+	changed := s.scroll != 0
+	s.scroll = 0
+	s.mu.Unlock()
+	if changed {
+		s.notify()
+	}
+}
+
+// ScrollOffset returns how many lines the view is scrolled back, and the
+// size of the history.
+func (s *Session) ScrollOffset() (offset, history int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.scroll, s.emu.ScrollbackLen()
+}
+
 // Close terminates the shell and releases the PTY.
 func (s *Session) Close() error {
 	if s.cmd.Process != nil {
 		_ = s.cmd.Process.Signal(os.Kill)
 	}
+	_ = s.emu.Close()
 	return s.pty.Close()
 }

@@ -22,6 +22,12 @@ var (
 			Background(lipgloss.Color("#F5C542")).
 			Padding(0, 1)
 
+	scrollStyle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("#000000")).
+			Background(lipgloss.Color("#7CC4FF")).
+			Padding(0, 1)
+
 	paneStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(accent)

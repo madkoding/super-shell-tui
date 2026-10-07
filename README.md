@@ -44,6 +44,12 @@ go build -o super-shell .
 
 Cualquier otra tecla va directo al shell.
 
+## Historial (scrollback)
+
+- `Shift+PgUp` / `Shift+PgDn`: desplazan el historial (hasta 10 000 líneas).
+- Cualquier tecla enviada al shell vuelve a la vista en vivo.
+- En apps de pantalla completa (vim, less) esas teclas van a la app.
+
 ## Arquitectura
 
 - `main.go`: pone la terminal en modo raw y arranca Bubble Tea con
@@ -51,7 +57,8 @@ Cualquier otra tecla va directo al shell.
 - `internal/input`: lee stdin byte a byte, intercepta solo el prefijo y
   traduce flechas a SS3 cuando el shell activa *application cursor mode*.
 - `internal/shell`: lanza el shell en un PTY (`creack/pty`) y emula la
-  pantalla con `vt10x`; `Render` la convierte a texto con colores ANSI.
+  pantalla con `charmbracelet/x/vt` (scrollback, caracteres anchos, modos
+  del terminal); `Render` la convierte a texto con colores ANSI.
 - `internal/ui`: layout (cabecera, panel lateral, panel del shell, estado) y
   redimensionado del PTY.
 
