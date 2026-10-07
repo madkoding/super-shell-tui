@@ -15,7 +15,7 @@ func (f fakeState) BracketedPaste() bool { return f.bracketed }
 // commands drops the bookkeeping actions (scroll reset, prefix state).
 func commands(acts []Action) []Action {
 	return slices.DeleteFunc(slices.Clone(acts), func(a Action) bool {
-		return a == ActionScrollReset || a == ActionPrefixArmed || a == ActionPrefixDone
+		return a == ActionScrollReset || a == ActionPrefixArmed || a == ActionPrefixDone || a == ActionResizeMode
 	})
 }
 
@@ -176,5 +176,33 @@ func TestFeedResizeKeys(t *testing.T) {
 	want := []Action{ActionResizeLeft, ActionResizeUp, ActionResizeDown, ActionResizeRight}
 	if len(out) != 0 || !slices.Equal(commands(acts), want) {
 		t.Fatalf("out %q actions %v", out, commands(acts))
+	}
+}
+
+func TestFeedResizeMode(t *testing.T) {
+	tr := NewTranslator(0, nil)
+	// One prefix, then arrows and H/J/K/L repeat until another key.
+	out, acts := tr.Feed([]byte{DefaultPrefix, 'L'})
+	if len(out) != 0 || !slices.Equal(acts, []Action{ActionPrefixArmed, ActionPrefixDone, ActionResizeRight, ActionResizeMode}) {
+		t.Fatalf("enter: out %q actions %v", out, acts)
+	}
+	out, acts = tr.Feed([]byte("L\x1b[DJ"))
+	if len(out) != 0 || !slices.Equal(acts, []Action{ActionResizeRight, ActionResizeLeft, ActionResizeDown}) {
+		t.Fatalf("repeat: out %q actions %v", out, acts)
+	}
+	out, acts = tr.Feed([]byte("ls"))
+	if string(out) != "ls" || !slices.Equal(acts, []Action{ActionScrollReset, ActionPrefixDone}) {
+		t.Fatalf("exit: out %q actions %v", out, acts)
+	}
+	if out, _ = tr.Feed([]byte("L")); string(out) != "L" {
+		t.Fatalf("after the mode L should reach the shell, got %q", out)
+	}
+	// Mouse reports don't end the mode; Esc ends it without reaching the shell.
+	tr.Feed([]byte{DefaultPrefix, 'H'})
+	if _, acts = tr.Feed([]byte("\x1b[<35;5;5M")); slices.Contains(acts, ActionPrefixDone) {
+		t.Fatalf("mouse move ended resize mode: %v", acts)
+	}
+	if out, acts = tr.Feed([]byte{0x1b}); len(out) != 0 || !slices.Equal(acts, []Action{ActionPrefixDone}) {
+		t.Fatalf("esc: out %q actions %v", out, acts)
 	}
 }
