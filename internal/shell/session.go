@@ -251,6 +251,15 @@ func (s *Session) Cwd() string {
 	return s.cwd
 }
 
+// FreshCwd looks the working directory up now, skipping the cache, for
+// callers that start a shell there right after the user may have run cd.
+func (s *Session) FreshCwd() string {
+	s.cwdMu.Lock()
+	defer s.cwdMu.Unlock()
+	s.cwd, s.cwdAt = processCwd(s.Pid()), time.Now()
+	return s.cwd
+}
+
 // ScrollBy moves the view n lines back into history (negative goes forward).
 // The alternate screen has no history, so it always stays live.
 func (s *Session) ScrollBy(n int) {

@@ -193,7 +193,7 @@ var ErrTooManyTabs = errors.New("too many tabs")
 func (w *Workspace) NewTab() error {
 	dir := ""
 	if s := w.Active(); s != nil {
-		dir = s.Cwd()
+		dir = s.FreshCwd()
 	}
 	return w.NewTabAt(dir, "")
 }
