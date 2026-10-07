@@ -21,6 +21,7 @@ var ErrNoRoom = errors.New("not enough room to split")
 // left of b; otherwise a is above b. ratio is a's share (0 means half).
 type node struct {
 	sess     *shell.Session
+	name     string // the pane's name, set by RenamePane; leaves only
 	vertical bool
 	ratio    float64
 	a, b     *node
@@ -51,6 +52,7 @@ func (n *node) setSplit(a, total int) {
 // relative to the top-left corner of the area.
 type Pane struct {
 	Sess       *shell.Session
+	Name       string // given with RenamePane, "" if none
 	X, Y, W, H int
 	Active     bool
 }
@@ -61,7 +63,7 @@ func (p Pane) Inner() (cols, rows int) { return max(p.W-2, 1), max(p.H-2, 1) }
 // layout splits the w x h area at (x, y) among the leaves of n.
 func layout(n *node, x, y, w, h int, out []Pane) []Pane {
 	if n.sess != nil {
-		return append(out, Pane{Sess: n.sess, X: x, Y: y, W: w, H: h})
+		return append(out, Pane{Sess: n.sess, Name: n.name, X: x, Y: y, W: w, H: h})
 	}
 	if n.vertical {
 		wa := n.splitAt(w, minPaneCols+2)
@@ -136,7 +138,7 @@ func (w *Workspace) panes(t *tab) []Pane {
 		return nil
 	}
 	if t.zoomed {
-		return []Pane{{Sess: t.focus, W: w.width, H: w.height, Active: true}}
+		return []Pane{{Sess: t.focus, Name: t.root.find(t.focus).name, W: w.width, H: w.height, Active: true}}
 	}
 	ps := layout(t.root, 0, 0, w.width, w.height, nil)
 	for i := range ps {
@@ -237,9 +239,9 @@ func (w *Workspace) Split(vertical bool) error {
 		_ = sess.Close()
 		return nil
 	}
-	old := &node{sess: leaf.sess}
+	old := &node{sess: leaf.sess, name: leaf.name}
 	added := &node{sess: sess}
-	leaf.sess, leaf.vertical, leaf.a, leaf.b = nil, vertical, old, added
+	leaf.sess, leaf.name, leaf.vertical, leaf.a, leaf.b = nil, "", vertical, old, added
 	old.parent, added.parent = leaf, leaf
 	t.focus = sess
 	w.mu.Unlock()
@@ -357,6 +359,7 @@ func (w *Workspace) SwapPane(back bool) {
 	}
 	a, b := t.root.find(all[i]), t.root.find(all[j])
 	a.sess, b.sess = b.sess, a.sess
+	a.name, b.name = b.name, a.name
 	w.mu.Unlock()
 	w.relayout(t)
 	w.notify()
@@ -383,10 +386,11 @@ func (w *Workspace) BreakPane() error {
 		return ErrTooManyTabs
 	}
 	sess := t.focus
-	t.root = remove(t.root, t.root.find(sess))
+	leaf := t.root.find(sess)
+	t.root = remove(t.root, leaf)
 	unzoom(t)
 	t.focus = t.root.first().sess
-	moved := &tab{root: &node{sess: sess}, focus: sess}
+	moved := &tab{root: &node{sess: sess, name: leaf.name}, focus: sess}
 	w.tabs = append(w.tabs, moved)
 	w.active = len(w.tabs) - 1
 	w.mu.Unlock()
@@ -394,4 +398,26 @@ func (w *Workspace) BreakPane() error {
 	w.relayout(moved)
 	w.notify()
 	return nil
+}
+
+// PaneName returns the focused pane's name ("" when it has none).
+func (w *Workspace) PaneName() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if len(w.tabs) == 0 {
+		return ""
+	}
+	t := w.tabs[w.active]
+	return t.root.find(t.focus).name
+}
+
+// RenamePane names the focused pane; "" goes back to the automatic label.
+func (w *Workspace) RenamePane(name string) {
+	w.mu.Lock()
+	if len(w.tabs) > 0 {
+		t := w.tabs[w.active]
+		t.root.find(t.focus).name = name
+	}
+	w.mu.Unlock()
+	w.notify()
 }
