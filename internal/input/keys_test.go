@@ -143,9 +143,9 @@ func TestFeedMouse(t *testing.T) {
 
 func TestFeedTabCommands(t *testing.T) {
 	tr := NewTranslator(0, nil)
-	_, acts := tr.Feed([]byte{DefaultPrefix, 'c', DefaultPrefix, 'n', DefaultPrefix, 'p', DefaultPrefix, '3', DefaultPrefix, 'x', DefaultPrefix, '/', DefaultPrefix, '|', DefaultPrefix, '-', DefaultPrefix, 'o'})
+	_, acts := tr.Feed([]byte{DefaultPrefix, 'c', DefaultPrefix, 'n', DefaultPrefix, 'p', DefaultPrefix, '3', DefaultPrefix, 'x', DefaultPrefix, '/', DefaultPrefix, '|', DefaultPrefix, '-', DefaultPrefix, 'o', DefaultPrefix, 'z'})
 	got := commands(acts)
-	want := []Action{ActionNewTab, ActionNextTab, ActionPrevTab, ActionSelectTab + 2, ActionCloseTab, ActionSearch, ActionSplitRight, ActionSplitDown, ActionNextPane}
+	want := []Action{ActionNewTab, ActionNextTab, ActionPrevTab, ActionSelectTab + 2, ActionCloseTab, ActionSearch, ActionSplitRight, ActionSplitDown, ActionNextPane, ActionZoomPane}
 	if !slices.Equal(got, want) || got[3].SelectedTab() != 2 || ActionQuit.SelectedTab() != -1 {
 		t.Fatalf("got %v", got)
 	}
@@ -166,5 +166,15 @@ func TestFeedCapture(t *testing.T) {
 	tr.Capture.Store(false)
 	if out, _ := tr.Feed([]byte("ls")); string(out) != "ls" {
 		t.Fatalf("got %q", out)
+	}
+}
+
+func TestFeedResizeKeys(t *testing.T) {
+	tr := NewTranslator(0, nil)
+	in := []byte{DefaultPrefix, 0x1b, '[', 'D', DefaultPrefix, 0x1b, 'O', 'A', DefaultPrefix, 'J', DefaultPrefix, 'L'}
+	out, acts := tr.Feed(in)
+	want := []Action{ActionResizeLeft, ActionResizeUp, ActionResizeDown, ActionResizeRight}
+	if len(out) != 0 || !slices.Equal(commands(acts), want) {
+		t.Fatalf("out %q actions %v", out, commands(acts))
 	}
 }

@@ -25,6 +25,7 @@ type Tab struct {
 	Name     string // user-given name, empty when automatic
 	Active   bool
 	Activity bool // output arrived while in the background
+	Zoomed   bool // showing one pane of several
 }
 
 type tab struct {
@@ -32,6 +33,7 @@ type tab struct {
 	focus    *shell.Session // the pane receiving keystrokes
 	name     string         // set by the user; empty means automatic
 	activity bool
+	zoomed   bool // only the focused pane is shown
 }
 
 // Workspace is safe for concurrent use: the input pump writes to it while
@@ -88,20 +90,79 @@ func Restore(st State, replay Replay, shellPath string, scrollback, width, heigh
 		changed:    make(chan struct{}, 1),
 	}
 	for _, t := range st.Tabs[:min(len(st.Tabs), MaxTabs)] {
-		if err := w.NewTabAt(t.Dir, t.Name); err != nil {
+		layout := t.Panes
+		if layout == nil || !layout.isSplit() || layout.count() > maxSavedPanes {
+			layout = &SavedPane{Dir: t.Dir, Cmd: t.Cmd, Focus: true}
+		}
+		if err := w.restoreTab(layout, t.Name, replay); err != nil {
 			w.Close()
 			return nil, err
-		}
-		if t.Cmd != "" && replay != ReplayOff {
-			line := t.Cmd
-			if replay == ReplayRun {
-				line += "\r"
-			}
-			go typeWhenReady(w.Active(), line)
 		}
 	}
 	w.Select(st.Active)
 	return w, nil
+}
+
+// restoreTab opens a tab with the saved layout, one shell per pane, and
+// replays each pane's program per replay.
+func (w *Workspace) restoreTab(layout *SavedPane, name string, replay Replay) error {
+	cols, rows := Pane{W: w.width, H: w.height}.Inner() // fixed by relayout
+	var started []*shell.Session
+	var focus *shell.Session
+	var build func(p *SavedPane, parent *node) (*node, error)
+	build = func(p *SavedPane, parent *node) (*node, error) {
+		n := &node{parent: parent}
+		if !p.isSplit() {
+			sess, err := shell.Start(w.shellPath, p.Dir, cols, rows, w.scrollback)
+			if err != nil {
+				return nil, err
+			}
+			started = append(started, sess)
+			if p.Focus || focus == nil {
+				focus = sess
+			}
+			if p.Cmd != "" && replay != ReplayOff {
+				line := p.Cmd
+				if replay == ReplayRun {
+					line += "\r"
+				}
+				go typeWhenReady(sess, line)
+			}
+			n.sess = sess
+			return n, nil
+		}
+		n.vertical = p.Vertical
+		if p.Ratio > 0 && p.Ratio < 1 {
+			n.ratio = p.Ratio
+		}
+		var err error
+		if n.a, err = build(p.A, n); err != nil {
+			return nil, err
+		}
+		if n.b, err = build(p.B, n); err != nil {
+			return nil, err
+		}
+		return n, nil
+	}
+	root, err := build(layout, nil)
+	if err != nil {
+		for _, s := range started {
+			_ = s.Close()
+		}
+		return err
+	}
+
+	t := &tab{root: root, focus: focus, name: name}
+	w.mu.Lock()
+	w.tabs = append(w.tabs, t)
+	w.active = len(w.tabs) - 1
+	w.mu.Unlock()
+	for _, s := range started {
+		go w.watch(t, s)
+	}
+	w.relayout(t)
+	w.notify()
+	return nil
 }
 
 // typeWhenReady writes line to the shell once its startup output (rc file
@@ -184,6 +245,7 @@ func (w *Workspace) watch(t *tab, sess *shell.Session) {
 				t.root = remove(t.root, leaf)
 			}
 			remaining := t.root != nil
+			unzoom(t)
 			if remaining && t.focus == sess {
 				t.focus = t.root.first().sess
 			}
@@ -302,7 +364,7 @@ func (w *Workspace) Tabs() []Tab {
 		if name == "" {
 			name = title(t.focus, i)
 		}
-		out[i] = Tab{Title: name, Name: t.name, Active: i == w.active, Activity: t.activity}
+		out[i] = Tab{Title: name, Name: t.name, Active: i == w.active, Activity: t.activity, Zoomed: t.zoomed}
 	}
 	return out
 }
@@ -348,15 +410,15 @@ func (w *Workspace) query(f func(*shell.Session) bool) bool {
 	return false
 }
 
-// Close terminates every shell.
+// Close terminates every shell, hidden panes included.
 func (w *Workspace) Close() {
 	w.mu.Lock()
-	var all []Pane
+	var all []*shell.Session
 	for _, t := range w.tabs {
-		all = append(all, w.panes(t)...)
+		all = t.root.leaves(all)
 	}
 	w.mu.Unlock()
-	for _, p := range all {
-		_ = p.Sess.Close()
+	for _, s := range all {
+		_ = s.Close()
 	}
 }
