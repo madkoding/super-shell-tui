@@ -50,6 +50,7 @@ super-shell -config otra.toml     # usa otro archivo
 | `sidebar`       | `true`      | Mostrar el panel lateral al iniciar              |
 | `sidebar_width` | `30`        | Ancho del panel lateral (16-80)                  |
 | `scrollback`    | `10000`     | Líneas de historial por shell (1-100000)         |
+| `restore_tabs`  | `true`      | Reabrir las pestañas de la sesión anterior       |
 | `colors.accent` | adaptativo  | Color principal en hex (`#9D7CFF`)               |
 | `colors.muted`  | adaptativo  | Color secundario en hex                          |
 
@@ -79,6 +80,11 @@ Cualquier otra tecla va directo al shell.
   pestañas en segundo plano que tuvieron salida nueva.
 - Al salir de un shell (`exit`, Ctrl+D) se cierra su pestaña; al cerrar la
   última termina la aplicación.
+- Una pestaña nueva abre en el directorio de la pestaña activa.
+- Al salir con `Ctrl+] q` se guardan las pestañas abiertas (directorio y
+  nombre) en `~/.local/state/super-shell/tabs.json` y se reabren al volver a
+  iniciar. Los programas en ejecución y el historial no se restauran. Si se
+  cierra la última pestaña, el archivo se borra y el próximo inicio es limpio.
 
 ## Historial (scrollback)
 

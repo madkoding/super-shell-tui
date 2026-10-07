@@ -45,8 +45,9 @@ type Session struct {
 }
 
 // Start launches shellPath (e.g. /bin/bash) in a new PTY of cols x rows,
-// keeping up to scrollback lines of history.
-func Start(shellPath string, cols, rows, scrollback int) (*Session, error) {
+// keeping up to scrollback lines of history. dir is the starting directory;
+// empty or missing means the current one.
+func Start(shellPath, dir string, cols, rows, scrollback int) (*Session, error) {
 	if cols < 1 {
 		cols = 80
 	}
@@ -55,6 +56,9 @@ func Start(shellPath string, cols, rows, scrollback int) (*Session, error) {
 	}
 
 	cmd := exec.Command(shellPath, "-i")
+	if fi, err := os.Stat(dir); dir != "" && err == nil && fi.IsDir() {
+		cmd.Dir = dir
+	}
 	cmd.Env = append(os.Environ(), "TERM=xterm-256color", "SUPER_SHELL=1")
 
 	f, err := pty.StartWithSize(cmd, &pty.Winsize{Cols: uint16(cols), Rows: uint16(rows)})
