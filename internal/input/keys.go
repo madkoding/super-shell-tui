@@ -40,6 +40,8 @@ const (
 	ActionResizeDown
 	ActionResizeMode    // after a resize: arrows and H/J/K/L keep resizing
 	ActionEqualizePanes // prefix + =: share the area evenly
+	ActionSwapPaneNext  // prefix + }: swap the pane with the next one
+	ActionSwapPanePrev  // prefix + {
 	ActionFocusLeft     // prefix + h/j/k/l: focus the pane that way
 	ActionFocusRight
 	ActionFocusUp
@@ -195,6 +197,10 @@ func (t *Translator) Feed(chunk []byte) (out []byte, actions []Action) {
 				actions = append(actions, ActionZoomPane)
 			case '=':
 				actions = append(actions, ActionEqualizePanes)
+			case '}':
+				actions = append(actions, ActionSwapPaneNext)
+			case '{':
+				actions = append(actions, ActionSwapPanePrev)
 			case 'h':
 				actions = append(actions, ActionFocusLeft)
 			case 'j':

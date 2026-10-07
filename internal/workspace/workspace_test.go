@@ -224,6 +224,34 @@ func TestEqualizePanes(t *testing.T) {
 	}
 }
 
+func TestSwapPane(t *testing.T) {
+	w, err := New("/bin/sh", 100, 40, 10)
+	if err != nil {
+		t.Skip("no /bin/sh:", err)
+	}
+	defer w.Close()
+	left := w.Active()
+	if err := w.Split(true); err != nil {
+		t.Fatal(err)
+	}
+	right := w.Active()
+	w.ToggleZoom()
+
+	w.SwapPane(false) // wraps: the right pane moves to the left
+	ps := w.Panes()
+	if len(ps) != 2 || ps[0].Sess != right || ps[1].Sess != left || !ps[0].Active {
+		t.Fatalf("after swap: %+v", ps)
+	}
+	if w.Tabs()[0].Zoomed {
+		t.Fatal("swapping should end the zoom")
+	}
+	w.SwapPane(true)
+	if ps := w.Panes(); ps[0].Sess != left || ps[1].Sess != right || !ps[1].Active {
+		t.Fatalf("after swap back: %+v", ps)
+	}
+	waitFor(t, func() bool { c, _ := left.Size(); return c == 18 })
+}
+
 func TestResizePanes(t *testing.T) {
 	w, err := New("/bin/sh", 100, 40, 10)
 	if err != nil {

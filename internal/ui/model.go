@@ -158,6 +158,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.ws.ResizePane(workspace.Up)
 		case input.ActionResizeDown:
 			m.ws.ResizePane(workspace.Down)
+		case input.ActionSwapPaneNext, input.ActionSwapPanePrev:
+			m.ws.SwapPane(input.Action(msg) == input.ActionSwapPanePrev)
 		case input.ActionEqualizePanes:
 			m.ws.EqualizePanes()
 		case input.ActionZoomPane:
@@ -281,7 +283,7 @@ func (m *Model) View() string {
 	} else if m.resizeMode {
 		status = bar(st.armed, "Tamaño: flechas o H/J/K/L mueven el borde · Enter/Esc o cualquier otra tecla terminan")
 	} else if m.prefixArmed {
-		status = bar(st.armed, fmt.Sprintf("%[1]s … ?  ayuda · c  nueva · x  cerrar · n/p  cambiar · 1-9  ir · r  renombrar · /  buscar · |/-  dividir · o/hjkl  panel · z  zoom · =  igualar · flechas  tamaño · s  panel · q  salir · %[1]s  enviar %[1]s", pfx))
+		status = bar(st.armed, fmt.Sprintf("%[1]s … ?  ayuda · c  nueva · x  cerrar · n/p  cambiar · 1-9  ir · r  renombrar · /  buscar · |/-  dividir · o/hjkl  panel · z  zoom · =  igualar · {/}  mover · flechas  tamaño · s  panel · q  salir · %[1]s  enviar %[1]s", pfx))
 	} else if off, history := m.sess.ScrollOffset(); off > 0 {
 		status = bar(st.scroll, fmt.Sprintf("Historial: %d/%d líneas arriba · Shift+PgDn bajar · cualquier tecla vuelve", off, history))
 	}
@@ -309,6 +311,7 @@ func (m *Model) sidebar() string {
 			"h j k l  panel en esa dirección",
 			"z  zoom del panel",
 			"=  paneles del mismo tamaño",
+			"{ }  mover el panel",
 			"flechas  cambiar tamaño",
 			"(se repiten sin prefijo;",
 			"Esc termina, o arrastra",

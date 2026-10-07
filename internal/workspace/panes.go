@@ -330,3 +330,34 @@ func (w *Workspace) FocusPane(dir Direction) {
 	}
 	w.notify()
 }
+
+// SwapPane exchanges the focused pane with the next one in layout order
+// (the previous one when back is set), wrapping around. The focus stays on
+// the moved shell.
+func (w *Workspace) SwapPane(back bool) {
+	w.mu.Lock()
+	if len(w.tabs) == 0 {
+		w.mu.Unlock()
+		return
+	}
+	t := w.tabs[w.active]
+	all := t.root.leaves(nil)
+	if len(all) < 2 {
+		w.mu.Unlock()
+		return
+	}
+	unzoom(t)
+	i := 0
+	for i < len(all) && all[i] != t.focus {
+		i++
+	}
+	j := (i + 1) % len(all)
+	if back {
+		j = (i - 1 + len(all)) % len(all)
+	}
+	a, b := t.root.find(all[i]), t.root.find(all[j])
+	a.sess, b.sess = b.sess, a.sess
+	w.mu.Unlock()
+	w.relayout(t)
+	w.notify()
+}
