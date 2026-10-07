@@ -5,6 +5,26 @@ se envían **en bruto** al PTY, así que el autocompletado (Tab), el historial
 (↑/↓) y la búsqueda inversa (Ctrl+R) de bash funcionan igual que en una
 terminal normal.
 
+## Instalación
+
+Binarios para Linux y macOS (amd64 y arm64) en
+[Releases](https://github.com/madkoding/super-shell-tui/releases):
+
+```sh
+# ejemplo: Linux amd64 (reemplaza VERSION, p. ej. 0.1.0)
+curl -sSL https://github.com/madkoding/super-shell-tui/releases/download/vVERSION/super-shell_VERSION_linux_amd64.tar.gz | tar -xz super-shell
+sudo mv super-shell /usr/local/bin/
+```
+
+Con Go instalado:
+
+```sh
+go install github.com/madkoding/super-shell-tui@latest   # instala el binario como super-shell-tui
+```
+
+Para publicar una versión: `git tag v0.1.0 && git push origin v0.1.0`; el
+workflow de release compila y sube los binarios con GoReleaser.
+
 ## Uso
 
 ```sh
