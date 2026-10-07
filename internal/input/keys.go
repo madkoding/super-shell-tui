@@ -38,6 +38,10 @@ const (
 	ActionResizeRight
 	ActionResizeUp
 	ActionResizeDown
+	ActionFocusLeft // prefix + h/j/k/l: focus the pane that way
+	ActionFocusRight
+	ActionFocusUp
+	ActionFocusDown
 )
 
 // ActionSelectTab is the first of nine actions selecting tabs 1..9
@@ -143,7 +147,7 @@ func (t *Translator) Feed(chunk []byte) (out []byte, actions []Action) {
 				actions = append(actions, ActionQuit)
 			case 's', 'S':
 				actions = append(actions, ActionToggleSidebar)
-			case '?', 'h':
+			case '?':
 				actions = append(actions, ActionToggleHelp)
 			case 'c':
 				actions = append(actions, ActionNewTab)
@@ -165,6 +169,14 @@ func (t *Translator) Feed(chunk []byte) (out []byte, actions []Action) {
 				actions = append(actions, ActionNextPane)
 			case 'z':
 				actions = append(actions, ActionZoomPane)
+			case 'h':
+				actions = append(actions, ActionFocusLeft)
+			case 'j':
+				actions = append(actions, ActionFocusDown)
+			case 'k':
+				actions = append(actions, ActionFocusUp)
+			case 'l':
+				actions = append(actions, ActionFocusRight)
 			case 'H':
 				actions = append(actions, ActionResizeLeft)
 			case 'L':

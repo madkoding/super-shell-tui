@@ -155,6 +155,41 @@ func TestSplitPanes(t *testing.T) {
 	waitFor(t, func() bool { c, _ := w.Active().Size(); return c == 38 })
 }
 
+func TestFocusPaneDirection(t *testing.T) {
+	w, err := New("/bin/sh", 100, 40, 10)
+	if err != nil {
+		t.Skip("no /bin/sh:", err)
+	}
+	defer w.Close()
+	left := w.Active()
+	if err := w.Split(true); err != nil {
+		t.Fatal(err)
+	}
+	top := w.Active()
+	if err := w.Split(false); err != nil {
+		t.Fatal(err)
+	}
+	bottom := w.Active()
+
+	steps := []struct {
+		dir  Direction
+		want any
+	}{
+		{Up, top}, {Up, top}, {Left, left}, {Left, left}, {Right, top}, {Down, bottom}, {Right, bottom},
+	}
+	for i, s := range steps {
+		w.FocusPane(s.dir)
+		if w.Active() != s.want {
+			t.Fatalf("step %d: focus did not move as expected", i)
+		}
+	}
+	w.ToggleZoom()
+	w.FocusPane(Left)
+	if w.Tabs()[0].Zoomed || w.Active() != left {
+		t.Fatal("FocusPane should end the zoom and move")
+	}
+}
+
 func TestResizePanes(t *testing.T) {
 	w, err := New("/bin/sh", 100, 40, 10)
 	if err != nil {

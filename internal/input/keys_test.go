@@ -178,3 +178,13 @@ func TestFeedResizeKeys(t *testing.T) {
 		t.Fatalf("out %q actions %v", out, commands(acts))
 	}
 }
+
+func TestFeedFocusKeys(t *testing.T) {
+	tr := NewTranslator(0, nil)
+	in := []byte{DefaultPrefix, 'h', DefaultPrefix, 'j', DefaultPrefix, 'k', DefaultPrefix, 'l'}
+	out, acts := tr.Feed(in)
+	want := []Action{ActionFocusLeft, ActionFocusDown, ActionFocusUp, ActionFocusRight}
+	if len(out) != 0 || !slices.Equal(commands(acts), want) {
+		t.Fatalf("out %q actions %v", out, commands(acts))
+	}
+}
