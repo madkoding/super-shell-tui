@@ -145,3 +145,44 @@ func (w *Workspace) MoveDivider(d Divider, x, y int) {
 		w.notify()
 	}
 }
+
+// units counts the panes n lines up along the split axis (vertical means
+// side by side): nested splits across the axis count as their widest part.
+func units(n *node, vertical bool) int {
+	if n.sess != nil {
+		return 1
+	}
+	a, b := units(n.a, vertical), units(n.b, vertical)
+	if n.vertical == vertical {
+		return a + b
+	}
+	return max(a, b)
+}
+
+// even gives every split of n a share that matches its panes, so panes in
+// a row or column end up the same size.
+func even(n *node) {
+	if n.sess != nil {
+		return
+	}
+	a, b := units(n.a, n.vertical), units(n.b, n.vertical)
+	n.ratio = float64(a) / float64(a+b)
+	even(n.a)
+	even(n.b)
+}
+
+// EqualizePanes resets every divider of the active tab so its panes share
+// the area evenly.
+func (w *Workspace) EqualizePanes() {
+	w.mu.Lock()
+	if len(w.tabs) == 0 {
+		w.mu.Unlock()
+		return
+	}
+	t := w.tabs[w.active]
+	unzoom(t)
+	even(t.root)
+	w.mu.Unlock()
+	w.relayout(t)
+	w.notify()
+}

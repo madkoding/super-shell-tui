@@ -79,6 +79,7 @@ que indica el archivo y la clave.
 | `Ctrl+] h` `j` `k` `l` | Ir al panel de la izquierda, abajo, arriba o derecha |
 | `Ctrl+] ←↑→↓` (o `H` `J` `K` `L`) | Mover el borde del panel activo |
 | `Ctrl+] {` / `Ctrl+] }` | Intercambiar el panel con el anterior / siguiente |
+| `Ctrl+] =`   | Repartir el área en paneles del mismo tamaño |
 | `Ctrl+] z`   | Zoom: el panel activo ocupa toda el área (otra vez para volver) |
 | `Ctrl+] /`   | Buscar en el historial       |
 | `Ctrl+] Ctrl+]` | Enviar `Ctrl+]` al shell  |

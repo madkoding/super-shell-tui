@@ -190,6 +190,40 @@ func TestFocusPaneDirection(t *testing.T) {
 	}
 }
 
+func TestEqualizePanes(t *testing.T) {
+	w, err := New("/bin/sh", 100, 40, 10)
+	if err != nil {
+		t.Skip("no /bin/sh:", err)
+	}
+	defer w.Close()
+	w.Resize(160, 40) // room for three columns
+	// Splitting the right half again leaves panes of 1/2, 1/4 and 1/4.
+	if err := w.Split(true); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Split(true); err != nil {
+		t.Fatal(err)
+	}
+	widths := func() []int {
+		var out []int
+		for _, p := range w.Panes() {
+			out = append(out, p.W)
+		}
+		return out
+	}
+	before := widths()
+	w.EqualizePanes()
+	got := widths()
+	if len(got) != 3 || before[0] == got[0] {
+		t.Fatalf("widths %v -> %v", before, got)
+	}
+	for _, x := range got {
+		if x < got[0]-1 || x > got[0]+1 {
+			t.Fatalf("uneven widths %v", got)
+		}
+	}
+}
+
 func TestSwapPane(t *testing.T) {
 	w, err := New("/bin/sh", 100, 40, 10)
 	if err != nil {

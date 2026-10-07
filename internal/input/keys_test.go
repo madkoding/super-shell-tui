@@ -217,6 +217,14 @@ func TestFeedResizeMode(t *testing.T) {
 	}
 }
 
+func TestFeedEqualizeKey(t *testing.T) {
+	tr := NewTranslator(0, nil)
+	out, acts := tr.Feed([]byte{DefaultPrefix, '='})
+	if len(out) != 0 || !slices.Equal(commands(acts), []Action{ActionEqualizePanes}) {
+		t.Fatalf("out %q actions %v", out, commands(acts))
+	}
+}
+
 func TestFeedSwapKeys(t *testing.T) {
 	tr := NewTranslator(0, nil)
 	out, acts := tr.Feed([]byte{DefaultPrefix, '}', DefaultPrefix, '{'})
