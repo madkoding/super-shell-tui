@@ -12,6 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"golang.org/x/term"
 
+	"github.com/madkoding/super-shell-tui/internal/config"
 	"github.com/madkoding/super-shell-tui/internal/input"
 	"github.com/madkoding/super-shell-tui/internal/shell"
 	"github.com/madkoding/super-shell-tui/internal/ui"
@@ -25,8 +26,25 @@ func main() {
 }
 
 func run() error {
-	shellPath := flag.String("shell", defaultShell(), "shell to run inside the pane")
+	configPath := flag.String("config", config.DefaultPath(), "config file (TOML)")
+	initConfig := flag.Bool("init-config", false, "write a commented config file with the defaults and exit")
+	shellFlag := flag.String("shell", "", "shell to run inside the pane (overrides the config)")
 	flag.Parse()
+
+	if *initConfig {
+		if err := config.WriteSample(*configPath); err != nil {
+			return fmt.Errorf("init config: %w", err)
+		}
+		fmt.Println("config written to", *configPath)
+		return nil
+	}
+
+	cfg, err := config.Load(*configPath)
+	if err != nil {
+		return err
+	}
+	prefix, prefixLabel, _ := config.ParsePrefix(cfg.Prefix) // validated by Load
+	shellPath := firstNonEmpty(*shellFlag, cfg.Shell, os.Getenv("SHELL"), "/bin/bash")
 
 	stdin := int(os.Stdin.Fd())
 	if !term.IsTerminal(stdin) {
@@ -38,7 +56,7 @@ func run() error {
 		cols, rows = 80, 24
 	}
 
-	sess, err := shell.Start(*shellPath, cols, rows)
+	sess, err := shell.Start(shellPath, cols, rows, cfg.Scrollback)
 	if err != nil {
 		return fmt.Errorf("start shell: %w", err)
 	}
@@ -52,7 +70,14 @@ func run() error {
 	}
 	defer term.Restore(stdin, oldState) //nolint:errcheck
 
-	model := ui.New(sess, *shellPath)
+	model := ui.New(sess, ui.Options{
+		ShellPath:    shellPath,
+		PrefixLabel:  prefixLabel,
+		ShowSidebar:  cfg.Sidebar,
+		SidebarWidth: cfg.SidebarWidth,
+		Accent:       cfg.Colors.Accent,
+		Muted:        cfg.Colors.Muted,
+	})
 	model.Clipboard = ui.OSC52Clipboard
 	// Bubble Tea enables bracketed paste on the real terminal by default;
 	// input.Translator forwards or strips the markers per the shell's mode.
@@ -60,7 +85,7 @@ func run() error {
 	// wheel; the reports are decoded by input.Translator, not Bubble Tea.
 	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithInput(nil), tea.WithMouseCellMotion())
 
-	tr := input.NewTranslator(input.DefaultPrefix, sess)
+	tr := input.NewTranslator(prefix, sess)
 	tr.OnMouse = func(ev input.MouseEvent) { p.Send(ui.MouseMsg(ev)) }
 	go func() {
 		_ = input.Pump(os.Stdin, sess, tr, func(a input.Action) {
@@ -84,9 +109,11 @@ func run() error {
 	return model.Err
 }
 
-func defaultShell() string {
-	if s := os.Getenv("SHELL"); s != "" {
-		return s
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if v != "" {
+			return v
+		}
 	}
-	return "/bin/bash"
+	return ""
 }
