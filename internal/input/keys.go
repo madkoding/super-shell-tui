@@ -41,6 +41,7 @@ const (
 	ActionResizeMode    // after a resize: arrows and H/J/K/L keep resizing
 	ActionEqualizePanes // prefix + =: share the area evenly
 	ActionBreakPane     // prefix + !: move the pane to a tab of its own
+	ActionRenamePane    // prefix + R: name the focused pane
 	ActionSwapPaneNext  // prefix + }: swap the pane with the next one
 	ActionSwapPanePrev  // prefix + {
 	ActionFocusLeft     // prefix + h/j/k/l: focus the pane that way

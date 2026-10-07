@@ -14,19 +14,28 @@ type TextMsg []byte
 // maxTabName limits tab names so the header stays readable.
 const maxTabName = 20
 
-func (m *Model) startRename() {
-	m.renaming = true
-	m.renameBuf = []rune(m.ws.Tabs()[m.ws.ActiveIndex()].Name)
+// startRename opens the name prompt for the active tab or, with pane set,
+// for the focused pane.
+func (m *Model) startRename(pane bool) {
+	m.renaming, m.renamingPane = true, pane
+	if pane {
+		m.renameBuf = []rune(m.ws.PaneName())
+	} else {
+		m.renameBuf = []rune(m.ws.Tabs()[m.ws.ActiveIndex()].Name)
+	}
 	if m.SetCapture != nil {
 		m.SetCapture(true)
 	}
 }
 
 func (m *Model) endRename(save bool) {
-	if save {
+	switch {
+	case save && m.renamingPane:
+		m.ws.RenamePane(string(m.renameBuf))
+	case save:
 		m.ws.RenameActive(string(m.renameBuf))
 	}
-	m.renaming = false
+	m.renaming, m.renamingPane = false, false
 	m.renameBuf = nil
 	if m.SetCapture != nil {
 		m.SetCapture(false)

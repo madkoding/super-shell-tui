@@ -128,7 +128,7 @@ func (w *Workspace) restoreTab(layout *SavedPane, name string, replay Replay) er
 				}
 				go typeWhenReady(sess, line)
 			}
-			n.sess = sess
+			n.sess, n.name = sess, p.Name
 			return n, nil
 		}
 		n.vertical = p.Vertical

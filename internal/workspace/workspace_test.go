@@ -283,6 +283,33 @@ func TestBreakPane(t *testing.T) {
 	}
 }
 
+func TestRenamePane(t *testing.T) {
+	w, err := New("/bin/sh", 100, 40, 10)
+	if err != nil {
+		t.Skip("no /bin/sh:", err)
+	}
+	defer w.Close()
+	w.RenamePane("server")
+	if err := w.Split(true); err != nil { // the name stays with its shell
+		t.Fatal(err)
+	}
+	if ps := w.Panes(); ps[0].Name != "server" || ps[1].Name != "" || w.PaneName() != "" {
+		t.Fatalf("after split: %+v", ps)
+	}
+	w.SwapPane(false)
+	if ps := w.Panes(); ps[1].Name != "server" {
+		t.Fatalf("after swap: %+v", ps)
+	}
+	r, err := Restore(w.Snapshot(), ReplayOff, "/bin/sh", 100, 40, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	if ps := r.Panes(); len(ps) != 2 || ps[1].Name != "server" {
+		t.Fatalf("restored: %+v", ps)
+	}
+}
+
 func TestResizePanes(t *testing.T) {
 	w, err := New("/bin/sh", 100, 40, 10)
 	if err != nil {

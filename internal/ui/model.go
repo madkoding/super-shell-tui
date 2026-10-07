@@ -56,6 +56,7 @@ type Model struct {
 	flash         string // transient status message
 	flashID       int
 	renaming      bool
+	renamingPane  bool // the rename prompt names the focused pane, not the tab
 	renameBuf     []rune
 	confirmClose  bool // waiting for y/n before closing the active tab
 	searching     bool // typing a scrollback search
@@ -138,7 +139,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case input.ActionPrevTab:
 			m.switchTab(m.ws.Prev)
 		case input.ActionRenameTab:
-			m.startRename()
+			m.startRename(false)
+		case input.ActionRenamePane:
+			m.startRename(true)
 		case input.ActionCloseTab:
 			m.startClose()
 		case input.ActionSearch:
@@ -238,7 +241,11 @@ func (m *Model) renderPanes() string {
 		box := style.Width(cols).Height(rows).Render(p.Sess.Render(p.Active))
 		lines[i] = strings.Split(box, "\n")
 		if len(panes) > 1 { // a lone pane is already named by its tab
-			lines[i][0] = topBorder(style, p.W, p.Sess.Label())
+			label := p.Name
+			if label == "" {
+				label = p.Sess.Label()
+			}
+			lines[i][0] = topBorder(style, p.W, label)
 		}
 	}
 	// The panes tile the area, so each screen row is the concatenation of
@@ -291,7 +298,11 @@ func (m *Model) View() string {
 
 	status := bar(st.status, fmt.Sprintf("%[1]s ? ayuda · %[1]s s panel · %[1]s q salir · Shift+PgUp historial", pfx))
 	if m.renaming {
-		status = bar(st.armed, "Nombre de la pestaña: "+string(m.renameBuf)+"█  · Enter guardar · Esc cancelar · vacío = automático")
+		what := "de la pestaña"
+		if m.renamingPane {
+			what = "del panel"
+		}
+		status = bar(st.armed, "Nombre "+what+": "+string(m.renameBuf)+"█  · Enter guardar · Esc cancelar · vacío = automático")
 	} else if m.confirmClose {
 		what := fmt.Sprintf("la pestaña %d", m.ws.ActiveIndex()+1)
 		if m.ws.PaneCount() > 1 {
@@ -314,9 +325,9 @@ func (m *Model) View() string {
 		status = bar(st.armed, "Tamaño: flechas o H/J/K/L mueven el borde · Enter/Esc o cualquier otra tecla terminan")
 	} else if m.prefixArmed {
 		k := m.key
-		status = bar(st.armed, fmt.Sprintf("%[1]s … %s  ayuda · %s  nueva · %s  cerrar · %s/%s  cambiar · 1-9  ir · %s  renombrar · %s  buscar · %s/%s  dividir · %s/%s%s%s%s  panel · %s  zoom · %s  a pestaña · %s  igualar · %s/%s  mover · flechas  tamaño · %s  panel · %s  salir · %[1]s  enviar %[1]s",
+		status = bar(st.armed, fmt.Sprintf("%[1]s … %s  ayuda · %s  nueva · %s  cerrar · %s/%s  cambiar · 1-9  ir · %s/%s  renombrar · %s  buscar · %s/%s  dividir · %s/%s%s%s%s  panel · %s  zoom · %s  a pestaña · %s  igualar · %s/%s  mover · flechas  tamaño · %s  panel · %s  salir · %[1]s  enviar %[1]s",
 			pfx, k(input.ActionToggleHelp), k(input.ActionNewTab), k(input.ActionCloseTab), k(input.ActionNextTab), k(input.ActionPrevTab),
-			k(input.ActionRenameTab), k(input.ActionSearch), k(input.ActionSplitRight), k(input.ActionSplitDown),
+			k(input.ActionRenameTab), k(input.ActionRenamePane), k(input.ActionSearch), k(input.ActionSplitRight), k(input.ActionSplitDown),
 			k(input.ActionNextPane), k(input.ActionFocusLeft), k(input.ActionFocusDown), k(input.ActionFocusUp), k(input.ActionFocusRight),
 			k(input.ActionZoomPane), k(input.ActionBreakPane), k(input.ActionEqualizePanes), k(input.ActionSwapPanePrev), k(input.ActionSwapPaneNext),
 			k(input.ActionToggleSidebar), k(input.ActionQuit)))
@@ -348,6 +359,7 @@ func (m *Model) sidebar() string {
 			k(input.ActionNextTab) + " / " + k(input.ActionPrevTab) + "  siguiente / anterior",
 			"1-9  ir a la pestaña",
 			k(input.ActionRenameTab) + "  renombrar pestaña",
+			k(input.ActionRenamePane) + "  renombrar panel",
 			k(input.ActionCloseTab) + "  cerrar panel o pestaña",
 			k(input.ActionSplitRight) + "  dividir a la derecha",
 			k(input.ActionSplitDown) + "  dividir hacia abajo",

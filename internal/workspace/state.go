@@ -30,6 +30,7 @@ type SavedTab struct {
 
 // SavedPane is a pane (Dir, Cmd, Focus) or a split of A and B.
 type SavedPane struct {
+	Name     string     `json:"name,omitempty"`
 	Dir      string     `json:"dir,omitempty"`
 	Cmd      string     `json:"cmd,omitempty"`
 	Focus    bool       `json:"focus,omitempty"`
@@ -54,7 +55,7 @@ func (p *SavedPane) count() int {
 // save captures n and the panes below it. Caller holds w.mu.
 func save(n *node, focus *shell.Session) *SavedPane {
 	if n.sess != nil {
-		return &SavedPane{Dir: n.sess.Cwd(), Cmd: n.sess.ForegroundCommand(), Focus: n.sess == focus}
+		return &SavedPane{Name: n.name, Dir: n.sess.Cwd(), Cmd: n.sess.ForegroundCommand(), Focus: n.sess == focus}
 	}
 	return &SavedPane{Vertical: n.vertical, Ratio: n.ratio, A: save(n.a, focus), B: save(n.b, focus)}
 }

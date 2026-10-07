@@ -73,6 +73,7 @@ que indica el archivo y la clave.
 | `Ctrl+] n` / `Ctrl+] p` | Pestaña siguiente / anterior |
 | `Ctrl+] 1`…`9` | Ir a la pestaña N          |
 | `Ctrl+] r`   | Renombrar la pestaña (Enter guarda, Esc cancela, vacío = automático) |
+| `Ctrl+] R`   | Renombrar el panel activo (se ve en su borde y se guarda al salir) |
 | `Ctrl+] x`   | Cerrar el panel, o la pestaña si tiene uno solo (si hay un programa corriendo pide confirmación con `y`) |
 | `Ctrl+] \|` / `Ctrl+] %` | Dividir el panel a la derecha |
 | `Ctrl+] -` / `Ctrl+] "` | Dividir el panel hacia abajo |
@@ -95,7 +96,7 @@ split_down = "b"
 ```
 
 Acciones: `quit`, `toggle_sidebar`, `help`, `new_tab`, `next_tab`,
-`prev_tab`, `rename_tab`, `close`, `search`, `split_right`, `split_down`,
+`prev_tab`, `rename_tab`, `rename_pane`, `close`, `search`, `split_right`, `split_down`,
 `next_pane`, `zoom`, `break_pane`, `equalize`, `swap_next`, `swap_prev`, `focus_left`,
 `focus_down`, `focus_up`, `focus_right`. Los dígitos y `H` `J` `K` `L` están
 reservados; la ayuda (`?`) muestra las teclas configuradas.
