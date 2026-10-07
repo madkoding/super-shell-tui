@@ -111,10 +111,10 @@ Cualquier otra tecla va directo al shell.
 - Al salir de un shell (`exit`, Ctrl+D) se cierra su pestaña; al cerrar la
   última termina la aplicación.
 - Una pestaña nueva abre en el directorio de la pestaña activa.
-- Al salir con `Ctrl+] q` se guardan las pestañas abiertas (directorio y
-  nombre) en `~/.local/state/super-shell/tabs.json` y se reabren al volver a
-  iniciar. Si se
-  cierra la última pestaña, el archivo se borra y el próximo inicio es limpio.
+- Al salir con `Ctrl+] q` se guardan las pestañas abiertas (directorio,
+  nombre, paneles y zoom) y cuál estaba activa en
+  `~/.local/state/super-shell/tabs.json`, y se reabren al volver a iniciar.
+  Si se cierra la última pestaña, el archivo se borra y el próximo inicio es limpio.
 - Si una pestaña tenía un programa corriendo al salir (por ejemplo
   `npm run dev`), al reabrirla queda escrito en el prompt para relanzarlo con
   Enter. Con `restore_command = "run"` se ejecuta solo; con `"off"` se ignora.

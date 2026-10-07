@@ -356,6 +356,17 @@ func TestRestorePanes(t *testing.T) {
 		t.Fatalf("restored %v, want %v", got, want)
 	}
 
+	// Zoom survives a restart too.
+	w.ToggleZoom()
+	r3, err := Restore(w.Snapshot(), ReplayOff, "/bin/sh", 100, 40, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r3.Close()
+	if !r3.Tabs()[0].Zoomed || len(r3.Panes()) != 1 || r3.PaneCount() != 3 {
+		t.Fatalf("zoom not restored: %+v", r3.Tabs()[0])
+	}
+
 	// A damaged layout falls back to one pane.
 	st := State{Tabs: []SavedTab{{Dir: "/", Panes: &SavedPane{A: &SavedPane{}}}}}
 	r2, err := Restore(st, ReplayOff, "/bin/sh", 100, 40, 10)
