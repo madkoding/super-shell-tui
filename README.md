@@ -48,7 +48,19 @@ Cualquier otra tecla va directo al shell.
 
 - `Shift+PgUp` / `Shift+PgDn`: desplazan el historial (hasta 10 000 líneas).
 - Cualquier tecla enviada al shell vuelve a la vista en vivo.
+- La rueda del mouse también desplaza el historial (en `less`/`man` envía ↑/↓).
 - En apps de pantalla completa (vim, less) esas teclas van a la app.
+
+## Mouse y portapapeles
+
+- Arrastra con el botón izquierdo para seleccionar texto del panel del shell;
+  al soltar se copia al portapapeles (OSC 52) y solo se copia el texto del
+  shell, sin bordes ni panel lateral.
+- Si el programa dentro del shell usa el mouse (vim con `set mouse=a`, htop,
+  mc), los eventos se le reenvían con coordenadas del panel.
+- La mayoría de terminales permiten la selección nativa con `Shift` + arrastrar.
+- En tmux, activa `set -g set-clipboard on` para que la copia llegue al
+  sistema.
 
 ## Arquitectura
 

@@ -50,6 +50,8 @@ type State interface {
 type Translator struct {
 	Prefix byte
 	State  State // may be nil
+	// OnMouse receives mouse reports; they are never forwarded as keys.
+	OnMouse func(MouseEvent)
 
 	armed   bool
 	inPaste bool // between paste markers: content is never interpreted
@@ -109,6 +111,13 @@ func (t *Translator) Feed(chunk []byte) (out []byte, actions []Action) {
 		if c == t.Prefix {
 			t.armed = true
 			actions = append(actions, ActionPrefixArmed)
+			continue
+		}
+		if ev, n, ok := parseSGRMouse(chunk[i:]); ok {
+			if t.OnMouse != nil {
+				t.OnMouse(ev)
+			}
+			i += n - 1
 			continue
 		}
 		if c == 0x1b && !alt {

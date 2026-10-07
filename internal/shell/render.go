@@ -10,7 +10,7 @@ import (
 // Render returns the visible part of the terminal (live screen or history,
 // depending on the scroll offset) as lines with ANSI SGR sequences.
 // When showCursor is true and the view is live, the cursor cell is drawn in
-// reverse video.
+// reverse video, as is the mouse selection.
 func (s *Session) Render(showCursor bool) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -29,17 +29,13 @@ func (s *Session) Render(showCursor bool) string {
 			b.WriteByte('\n')
 		}
 		idx := top + y
-		cell := func(x int) *uv.Cell {
-			if idx < history {
-				return s.emu.ScrollbackCellAt(x, idx)
-			}
-			return s.emu.CellAt(x, idx-history)
-		}
+		cell := func(x int) *uv.Cell { return s.cellAtAbs(x, idx) }
 		cursorX := -1
 		if showCursor && idx-history == cur.Y {
 			cursorX = cur.X
 		}
-		renderLine(&b, cols, cell, cursorX)
+		selected := func(x int) bool { return s.sel.contains(x, idx) }
+		renderLine(&b, cols, cell, cursorX, selected)
 	}
 	return b.String()
 }
@@ -47,7 +43,7 @@ func (s *Session) Render(showCursor bool) string {
 // renderLine writes one row of exactly cols cells. Missing cells (short
 // history lines) are padded with blanks; the trailing half of a wide
 // character is skipped because the wide cell already covers it.
-func renderLine(b *strings.Builder, cols int, cell func(x int) *uv.Cell, cursorX int) {
+func renderLine(b *strings.Builder, cols int, cell func(x int) *uv.Cell, cursorX int, selected func(x int) bool) {
 	var pen uv.Style
 	for x := 0; x < cols; {
 		c := cell(x)
@@ -68,7 +64,7 @@ func renderLine(b *strings.Builder, cols int, cell func(x int) *uv.Cell, cursorX
 				content = " " // wide char cut by the pane edge
 			}
 		}
-		if x == cursorX {
+		if (x == cursorX) != selected(x) { // selection over the cursor cancels out
 			st.Attrs ^= uv.AttrReverse
 		}
 		if !st.Equal(&pen) {

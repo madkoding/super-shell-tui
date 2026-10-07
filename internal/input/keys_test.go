@@ -117,3 +117,26 @@ func TestFeedBracketedPaste(t *testing.T) {
 		t.Fatalf("got %q %v", out, acts)
 	}
 }
+
+func TestFeedMouse(t *testing.T) {
+	tr := NewTranslator(0, fakeState{})
+	var got []MouseEvent
+	tr.OnMouse = func(e MouseEvent) { got = append(got, e) }
+
+	out, acts := tr.Feed([]byte("a\x1b[<0;10;5M\x1b[<32;12;5M\x1b[<0;12;5m\x1b[<65;1;1Mb"))
+	if string(out) != "ab" || len(commands(acts)) != 0 {
+		t.Fatalf("got %q %v", out, acts)
+	}
+	want := []MouseEvent{
+		{Code: 0, X: 9, Y: 4},
+		{Code: 32, X: 11, Y: 4},
+		{Code: 0, X: 11, Y: 4, Release: true},
+		{Code: 65, X: 0, Y: 0},
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("got %+v", got)
+	}
+	if !got[1].Motion() || got[3].Wheel() != 1 || got[0].Button() != 0 {
+		t.Fatalf("bad helpers: %+v", got)
+	}
+}

@@ -53,11 +53,15 @@ func run() error {
 	defer term.Restore(stdin, oldState) //nolint:errcheck
 
 	model := ui.New(sess, *shellPath)
+	model.Clipboard = ui.OSC52Clipboard
 	// Bubble Tea enables bracketed paste on the real terminal by default;
 	// input.Translator forwards or strips the markers per the shell's mode.
-	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithInput(nil))
+	// Mouse reporting (button events, SGR) is turned on for selection and the
+	// wheel; the reports are decoded by input.Translator, not Bubble Tea.
+	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithInput(nil), tea.WithMouseCellMotion())
 
 	tr := input.NewTranslator(input.DefaultPrefix, sess)
+	tr.OnMouse = func(ev input.MouseEvent) { p.Send(ui.MouseMsg(ev)) }
 	go func() {
 		_ = input.Pump(os.Stdin, sess, tr, func(a input.Action) {
 			switch a {
@@ -67,6 +71,7 @@ func run() error {
 				sess.ScrollPage(-1)
 			case input.ActionScrollReset:
 				sess.ResetScroll()
+				sess.ClearSelection()
 			default:
 				p.Send(ui.ActionMsg(a))
 			}
