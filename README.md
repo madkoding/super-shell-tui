@@ -93,8 +93,9 @@ Cualquier otra tecla va directo al shell.
 - `Ctrl+] z` agranda el panel activo a toda el área; la pestaña muestra
   `(zoom)`. Se vuelve al layout con `Ctrl+] z`, al cambiar de panel o al
   dividir.
-- Las divisiones no se guardan entre sesiones: cada pestaña se restaura con
-  el directorio de su panel activo.
+- Al salir se guardan también los paneles de cada pestaña (divisiones,
+  tamaños, directorio y programa de cada uno, y cuál estaba activo). El zoom
+  no se guarda.
 
 ## Historial (scrollback)
 

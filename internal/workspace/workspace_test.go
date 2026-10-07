@@ -187,3 +187,55 @@ func TestResizePanes(t *testing.T) {
 	}
 	waitFor(t, func() bool { c, _ := w.Active().Size(); return c == 10 })
 }
+
+func TestRestorePanes(t *testing.T) {
+	w, err := New("/bin/sh", 100, 40, 10)
+	if err != nil {
+		t.Skip("no /bin/sh:", err)
+	}
+	defer w.Close()
+	if err := w.Split(true); err != nil {
+		t.Fatal(err)
+	}
+	w.ResizePane(Right)
+	if err := w.Split(false); err != nil {
+		t.Fatal(err)
+	}
+	w.FocusNext() // focus the left pane
+	rects := func(w *Workspace) (out [][5]int) {
+		for _, p := range w.Panes() {
+			active := 0
+			if p.Active {
+				active = 1
+			}
+			out = append(out, [5]int{p.X, p.Y, p.W, p.H, active})
+		}
+		return out
+	}
+	want := rects(w)
+
+	// Through JSON, as on disk.
+	path := filepath.Join(t.TempDir(), "tabs.json")
+	if err := SaveState(path, w.Snapshot()); err != nil {
+		t.Fatal(err)
+	}
+	r, err := Restore(LoadState(path), ReplayOff, "/bin/sh", 100, 40, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	if got := rects(r); !reflect.DeepEqual(got, want) {
+		t.Fatalf("restored %v, want %v", got, want)
+	}
+
+	// A damaged layout falls back to one pane.
+	st := State{Tabs: []SavedTab{{Dir: "/", Panes: &SavedPane{A: &SavedPane{}}}}}
+	r2, err := Restore(st, ReplayOff, "/bin/sh", 100, 40, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r2.Close()
+	if r2.PaneCount() != 1 {
+		t.Fatalf("damaged layout gave %d panes", r2.PaneCount())
+	}
+}
