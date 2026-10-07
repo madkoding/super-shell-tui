@@ -162,6 +162,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.ws.SwapPane(input.Action(msg) == input.ActionSwapPanePrev)
 		case input.ActionEqualizePanes:
 			m.ws.EqualizePanes()
+		case input.ActionBreakPane:
+			var err error
+			m.switchTab(func() { err = m.ws.BreakPane() })
+			switch {
+			case errors.Is(err, workspace.ErrSinglePane):
+				return m, m.setFlash("La pestaña tiene un solo panel")
+			case err != nil:
+				return m, m.setFlash("No se pudo mover el panel: " + err.Error())
+			}
 		case input.ActionZoomPane:
 			if m.ws.PaneCount() < 2 {
 				return m, m.setFlash("El zoom necesita al menos dos paneles (" + m.opts.PrefixLabel + " | para dividir)")
@@ -283,7 +292,7 @@ func (m *Model) View() string {
 	} else if m.resizeMode {
 		status = bar(st.armed, "Tamaño: flechas o H/J/K/L mueven el borde · Enter/Esc o cualquier otra tecla terminan")
 	} else if m.prefixArmed {
-		status = bar(st.armed, fmt.Sprintf("%[1]s … ?  ayuda · c  nueva · x  cerrar · n/p  cambiar · 1-9  ir · r  renombrar · /  buscar · |/-  dividir · o/hjkl  panel · z  zoom · =  igualar · {/}  mover · flechas  tamaño · s  panel · q  salir · %[1]s  enviar %[1]s", pfx))
+		status = bar(st.armed, fmt.Sprintf("%[1]s … ?  ayuda · c  nueva · x  cerrar · n/p  cambiar · 1-9  ir · r  renombrar · /  buscar · |/-  dividir · o/hjkl  panel · z  zoom · !  a pestaña · =  igualar · {/}  mover · flechas  tamaño · s  panel · q  salir · %[1]s  enviar %[1]s", pfx))
 	} else if off, history := m.sess.ScrollOffset(); off > 0 {
 		status = bar(st.scroll, fmt.Sprintf("Historial: %d/%d líneas arriba · Shift+PgDn bajar · cualquier tecla vuelve", off, history))
 	}
@@ -310,6 +319,7 @@ func (m *Model) sidebar() string {
 			"o  siguiente panel",
 			"h j k l  panel en esa dirección",
 			"z  zoom del panel",
+			"!  panel a pestaña nueva",
 			"=  paneles del mismo tamaño",
 			"{ }  mover el panel",
 			"flechas  cambiar tamaño",

@@ -80,6 +80,7 @@ que indica el archivo y la clave.
 | `Ctrl+] ←↑→↓` (o `H` `J` `K` `L`) | Mover el borde del panel activo |
 | `Ctrl+] {` / `Ctrl+] }` | Intercambiar el panel con el anterior / siguiente |
 | `Ctrl+] =`   | Repartir el área en paneles del mismo tamaño |
+| `Ctrl+] !`   | Mover el panel activo a una pestaña nueva |
 | `Ctrl+] z`   | Zoom: el panel activo ocupa toda el área (otra vez para volver) |
 | `Ctrl+] /`   | Buscar en el historial       |
 | `Ctrl+] Ctrl+]` | Enviar `Ctrl+]` al shell  |

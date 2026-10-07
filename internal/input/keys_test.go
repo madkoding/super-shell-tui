@@ -233,3 +233,11 @@ func TestFeedSwapKeys(t *testing.T) {
 		t.Fatalf("out %q actions %v", out, commands(acts))
 	}
 }
+
+func TestFeedBreakPaneKey(t *testing.T) {
+	tr := NewTranslator(0, nil)
+	out, acts := tr.Feed([]byte{DefaultPrefix, '!'})
+	if len(out) != 0 || !slices.Equal(commands(acts), []Action{ActionBreakPane}) {
+		t.Fatalf("out %q actions %v", out, commands(acts))
+	}
+}
