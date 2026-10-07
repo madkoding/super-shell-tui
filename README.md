@@ -56,6 +56,7 @@ que indica el archivo y la clave.
 | `Ctrl+] \|` / `Ctrl+] %` | Dividir el panel a la derecha |
 | `Ctrl+] -` / `Ctrl+] "` | Dividir el panel hacia abajo |
 | `Ctrl+] o`   | Siguiente panel              |
+| `Ctrl+] ←↑→↓` (o `H` `J` `K` `L`) | Mover el borde del panel activo |
 | `Ctrl+] z`   | Zoom: el panel activo ocupa toda el área (otra vez para volver) |
 | `Ctrl+] /`   | Buscar en el historial       |
 | `Ctrl+] Ctrl+]` | Enviar `Ctrl+]` al shell  |
@@ -86,6 +87,9 @@ Cualquier otra tecla va directo al shell.
 - El panel activo tiene el borde de color; cambia con `Ctrl+] o` o con un
   click. La rueda del mouse desplaza el panel que está bajo el puntero.
 - Al salir de un shell su panel desaparece y el vecino ocupa su lugar.
+- `Ctrl+] ←/→` mueve el borde vertical más cercano al panel activo y
+  `Ctrl+] ↑/↓` el horizontal, un 10 % por pulsación. También se puede
+  arrastrar el borde entre dos paneles con el mouse.
 - `Ctrl+] z` agranda el panel activo a toda el área; la pestaña muestra
   `(zoom)`. Se vuelve al layout con `Ctrl+] z`, al cambiar de panel o al
   dividir.

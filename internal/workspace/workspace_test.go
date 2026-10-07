@@ -154,3 +154,36 @@ func TestSplitPanes(t *testing.T) {
 	}
 	waitFor(t, func() bool { c, _ := w.Active().Size(); return c == 38 })
 }
+
+func TestResizePanes(t *testing.T) {
+	w, err := New("/bin/sh", 100, 40, 10)
+	if err != nil {
+		t.Skip("no /bin/sh:", err)
+	}
+	defer w.Close()
+	if err := w.Split(true); err != nil {
+		t.Fatal(err)
+	}
+	widths := func() [2]int { ps := w.Panes(); return [2]int{ps[0].W, ps[1].W} }
+
+	w.ResizePane(Right) // one step is a tenth of the split
+	if got := widths(); got != [2]int{24, 16} {
+		t.Fatalf("after Right: %v", got)
+	}
+	w.ResizePane(Up) // no horizontal divider: nothing moves
+	if got := widths(); got != [2]int{24, 16} {
+		t.Fatalf("after Up: %v", got)
+	}
+	if _, ok := w.DividerAt(5, 5); ok {
+		t.Fatal("no divider inside a pane")
+	}
+	d, ok := w.DividerAt(23, 3)
+	if !ok {
+		t.Fatal("divider not found on the border")
+	}
+	w.MoveDivider(d, 35, 3) // clamped so the right pane keeps 10 columns
+	if got := widths(); got != [2]int{28, 12} {
+		t.Fatalf("after drag: %v", got)
+	}
+	waitFor(t, func() bool { c, _ := w.Active().Size(); return c == 10 })
+}
