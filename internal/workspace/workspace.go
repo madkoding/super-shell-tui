@@ -1,5 +1,6 @@
-// Package workspace manages several shell sessions shown as tabs. Only the
-// active tab receives keystrokes and is rendered; the others keep running.
+// Package workspace manages shell sessions shown as tabs, each split into one
+// or more panes. Only the focused pane of the active tab receives keystrokes;
+// every other shell keeps running.
 package workspace
 
 import (
@@ -27,8 +28,9 @@ type Tab struct {
 }
 
 type tab struct {
-	sess     *shell.Session
-	name     string // set by the user; empty means automatic
+	root     *node
+	focus    *shell.Session // the pane receiving keystrokes
+	name     string         // set by the user; empty means automatic
 	activity bool
 }
 
@@ -38,21 +40,22 @@ type Workspace struct {
 	shellPath  string
 	scrollback int
 
-	mu         sync.Mutex
-	tabs       []*tab
-	active     int
-	cols, rows int
+	mu            sync.Mutex
+	tabs          []*tab
+	active        int
+	width, height int // pane area, pane borders included
 
 	changed chan struct{}
 }
 
-// New starts a workspace with one shell of cols x rows.
-func New(shellPath string, scrollback, cols, rows int) (*Workspace, error) {
+// New starts a workspace with one shell. width x height is the pane area,
+// borders included.
+func New(shellPath string, scrollback, width, height int) (*Workspace, error) {
 	w := &Workspace{
 		shellPath:  shellPath,
 		scrollback: scrollback,
-		cols:       cols,
-		rows:       rows,
+		width:      width,
+		height:     height,
 		changed:    make(chan struct{}, 1),
 	}
 	if err := w.NewTab(); err != nil {
@@ -73,15 +76,15 @@ const (
 // Restore starts one tab per saved entry (directory and name), replays the
 // program each one was running per replay, and activates the saved tab.
 // With no usable entries it behaves like New.
-func Restore(st State, replay Replay, shellPath string, scrollback, cols, rows int) (*Workspace, error) {
+func Restore(st State, replay Replay, shellPath string, scrollback, width, height int) (*Workspace, error) {
 	if len(st.Tabs) == 0 {
-		return New(shellPath, scrollback, cols, rows)
+		return New(shellPath, scrollback, width, height)
 	}
 	w := &Workspace{
 		shellPath:  shellPath,
 		scrollback: scrollback,
-		cols:       cols,
-		rows:       rows,
+		width:      width,
+		height:     height,
 		changed:    make(chan struct{}, 1),
 	}
 	for _, t := range st.Tabs[:min(len(st.Tabs), MaxTabs)] {
@@ -141,49 +144,60 @@ func (w *Workspace) NewTabAt(dir, name string) error {
 		w.mu.Unlock()
 		return ErrTooManyTabs
 	}
-	cols, rows := w.cols, w.rows
+	cols, rows := Pane{W: w.width, H: w.height}.Inner()
 	w.mu.Unlock()
 
 	sess, err := shell.Start(w.shellPath, dir, cols, rows, w.scrollback)
 	if err != nil {
 		return err
 	}
-	t := &tab{sess: sess, name: name}
+	t := &tab{root: &node{sess: sess}, focus: sess, name: name}
 	w.mu.Lock()
 	w.tabs = append(w.tabs, t)
 	w.active = len(w.tabs) - 1
 	w.mu.Unlock()
 
-	go w.watch(t)
+	go w.watch(t, sess)
 	w.notify()
 	return nil
 }
 
-// watch forwards a tab's screen updates and removes it when its shell exits.
-func (w *Workspace) watch(t *tab) {
-	seen := t.sess.Outputs()
+// watch forwards a pane's screen updates and removes the pane when its
+// shell exits; the tab goes away with its last pane.
+func (w *Workspace) watch(t *tab, sess *shell.Session) {
+	seen := sess.Outputs()
 	for {
 		select {
-		case <-t.sess.Updates():
-			out := t.sess.Outputs()
+		case <-sess.Updates():
+			out := sess.Outputs()
 			w.mu.Lock()
-			redraw := t.sess.SinceResize() < resizeQuiet
+			redraw := sess.SinceResize() < resizeQuiet
 			if out != seen && !redraw && w.indexOf(t) != w.active {
 				t.activity = true
 			}
 			seen = out
 			w.mu.Unlock()
 			w.notify()
-		case <-t.sess.Done():
+		case <-sess.Done():
 			w.mu.Lock()
-			if i := w.indexOf(t); i >= 0 {
+			if leaf := t.root.find(sess); leaf != nil {
+				t.root = remove(t.root, leaf)
+			}
+			remaining := t.root != nil
+			if remaining && t.focus == sess {
+				t.focus = t.root.first().sess
+			}
+			if i := w.indexOf(t); i >= 0 && !remaining {
 				w.tabs = append(w.tabs[:i], w.tabs[i+1:]...)
 				if w.active > i || w.active >= len(w.tabs) {
 					w.active = max(w.active-1, 0)
 				}
 			}
 			w.mu.Unlock()
-			_ = t.sess.Close()
+			_ = sess.Close()
+			if remaining {
+				w.relayout(t)
+			}
 			w.notify()
 			return
 		}
@@ -223,7 +237,7 @@ func (w *Workspace) Active() *shell.Session {
 	if len(w.tabs) == 0 {
 		return nil
 	}
-	return w.tabs[w.active].sess
+	return w.tabs[w.active].focus
 }
 
 // ActiveIndex returns the 0-based index of the active tab.
@@ -256,8 +270,8 @@ func (w *Workspace) RenameActive(name string) {
 	w.notify()
 }
 
-// CloseActive terminates the active tab's shell; its tab disappears once
-// the shell exits, like a regular exit.
+// CloseActive terminates the focused pane's shell; the pane (and the tab,
+// with its last pane) disappears once the shell exits, like a regular exit.
 func (w *Workspace) CloseActive() {
 	if s := w.Active(); s != nil {
 		_ = s.Close()
@@ -286,7 +300,7 @@ func (w *Workspace) Tabs() []Tab {
 	for i, t := range w.tabs {
 		name := t.name
 		if name == "" {
-			name = title(t.sess, i)
+			name = title(t.focus, i)
 		}
 		out[i] = Tab{Title: name, Name: t.name, Active: i == w.active, Activity: t.activity}
 	}
@@ -300,14 +314,14 @@ func title(s *shell.Session, i int) string {
 	return "shell " + strconv.Itoa(i+1)
 }
 
-// Resize applies a new pane size to every tab.
-func (w *Workspace) Resize(cols, rows int) {
+// Resize sets the pane area (borders included) and lays out every tab.
+func (w *Workspace) Resize(width, height int) {
 	w.mu.Lock()
-	w.cols, w.rows = cols, rows
+	w.width, w.height = width, height
 	tabs := append([]*tab(nil), w.tabs...)
 	w.mu.Unlock()
 	for _, t := range tabs {
-		_ = t.sess.Resize(cols, rows)
+		w.relayout(t)
 	}
 }
 
@@ -337,9 +351,12 @@ func (w *Workspace) query(f func(*shell.Session) bool) bool {
 // Close terminates every shell.
 func (w *Workspace) Close() {
 	w.mu.Lock()
-	tabs := append([]*tab(nil), w.tabs...)
+	var all []Pane
+	for _, t := range w.tabs {
+		all = append(all, w.panes(t)...)
+	}
 	w.mu.Unlock()
-	for _, t := range tabs {
-		_ = t.sess.Close()
+	for _, p := range all {
+		_ = p.Sess.Close()
 	}
 }

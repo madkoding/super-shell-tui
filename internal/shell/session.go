@@ -15,6 +15,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/vt"
 	"github.com/creack/pty"
+	"golang.org/x/sys/unix"
 )
 
 // cwdTTL is how long a looked-up working directory is reused.
@@ -198,8 +199,25 @@ func (s *Session) Resize(cols, rows int) error {
 	s.scroll = min(s.scroll, s.emu.ScrollbackLen())
 	s.mu.Unlock()
 
-	err := pty.Setsize(s.pty, &pty.Winsize{Cols: uint16(cols), Rows: uint16(rows)})
+	err := s.setWinsize(cols, rows)
 	s.notify()
+	return err
+}
+
+// setWinsize resizes the PTY, which sends SIGWINCH to the shell. It goes
+// through SyscallConn rather than pty.Setsize: File.Fd would race with Close
+// and switch the PTY to blocking mode.
+func (s *Session) setWinsize(cols, rows int) error {
+	conn, err := s.pty.SyscallConn()
+	if err != nil {
+		return err
+	}
+	cerr := conn.Control(func(fd uintptr) {
+		err = unix.IoctlSetWinsize(int(fd), unix.TIOCSWINSZ, &unix.Winsize{Col: uint16(cols), Row: uint16(rows)})
+	})
+	if cerr != nil {
+		return cerr
+	}
 	return err
 }
 

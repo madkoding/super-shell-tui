@@ -5,7 +5,8 @@ import "github.com/charmbracelet/lipgloss"
 // styles is the theme, built from the configured colors.
 type styles struct {
 	header, status, armed, scroll lipgloss.Style
-	pane, sidebar, label, value   lipgloss.Style
+	pane, paneIdle, sidebar       lipgloss.Style
+	label, value                  lipgloss.Style
 }
 
 func newStyles(accentHex, mutedHex string) styles {
@@ -28,12 +29,13 @@ func newStyles(accentHex, mutedHex string) styles {
 			Foreground(lipgloss.Color("#FFFFFF")).
 			Background(accent).
 			Padding(0, 1),
-		status:  lipgloss.NewStyle().Foreground(muted).Padding(0, 1),
-		armed:   banner("#F5C542"),
-		scroll:  banner("#7CC4FF"),
-		pane:    lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(accent),
-		sidebar: lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(muted).Padding(0, 1),
-		label:   lipgloss.NewStyle().Foreground(accent).Bold(true),
-		value:   lipgloss.NewStyle().Foreground(muted),
+		status:   lipgloss.NewStyle().Foreground(muted).Padding(0, 1),
+		armed:    banner("#F5C542"),
+		scroll:   banner("#7CC4FF"),
+		pane:     lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(accent),
+		paneIdle: lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(muted),
+		sidebar:  lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(muted).Padding(0, 1),
+		label:    lipgloss.NewStyle().Foreground(accent).Bold(true),
+		value:    lipgloss.NewStyle().Foreground(muted),
 	}
 }
