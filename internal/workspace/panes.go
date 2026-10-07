@@ -111,6 +111,9 @@ func remove(root, leaf *node) *node {
 // panes lays out tab t in the current area; a zoomed tab shows only its
 // focused pane. Caller holds w.mu.
 func (w *Workspace) panes(t *tab) []Pane {
+	if t.root == nil { // its last pane exited while another watcher relaid it out
+		return nil
+	}
 	if t.zoomed {
 		return []Pane{{Sess: t.focus, W: w.width, H: w.height, Active: true}}
 	}
