@@ -117,3 +117,64 @@ func TestFeedBracketedPaste(t *testing.T) {
 		t.Fatalf("got %q %v", out, acts)
 	}
 }
+
+func TestFeedMouse(t *testing.T) {
+	tr := NewTranslator(0, fakeState{})
+	var got []MouseEvent
+	tr.OnMouse = func(e MouseEvent) { got = append(got, e) }
+
+	out, acts := tr.Feed([]byte("a\x1b[<0;10;5M\x1b[<32;12;5M\x1b[<0;12;5m\x1b[<65;1;1Mb"))
+	if string(out) != "ab" || len(commands(acts)) != 0 {
+		t.Fatalf("got %q %v", out, acts)
+	}
+	want := []MouseEvent{
+		{Code: 0, X: 9, Y: 4},
+		{Code: 32, X: 11, Y: 4},
+		{Code: 0, X: 11, Y: 4, Release: true},
+		{Code: 65, X: 0, Y: 0},
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("got %+v", got)
+	}
+	if !got[1].Motion() || got[3].Wheel() != 1 || got[0].Button() != 0 {
+		t.Fatalf("bad helpers: %+v", got)
+	}
+}
+
+func TestFeedTabCommands(t *testing.T) {
+	tr := NewTranslator(0, nil)
+	_, acts := tr.Feed([]byte{DefaultPrefix, 'c', DefaultPrefix, 'n', DefaultPrefix, 'p', DefaultPrefix, '3', DefaultPrefix, 'x', DefaultPrefix, '/', DefaultPrefix, '|', DefaultPrefix, '-', DefaultPrefix, 'o', DefaultPrefix, 'z'})
+	got := commands(acts)
+	want := []Action{ActionNewTab, ActionNextTab, ActionPrevTab, ActionSelectTab + 2, ActionCloseTab, ActionSearch, ActionSplitRight, ActionSplitDown, ActionNextPane, ActionZoomPane}
+	if !slices.Equal(got, want) || got[3].SelectedTab() != 2 || ActionQuit.SelectedTab() != -1 {
+		t.Fatalf("got %v", got)
+	}
+}
+
+func TestFeedCapture(t *testing.T) {
+	tr := NewTranslator(0, nil)
+	if _, acts := tr.Feed([]byte{DefaultPrefix, 'r'}); !slices.Equal(commands(acts), []Action{ActionRenameTab}) {
+		t.Fatalf("got %v", acts)
+	}
+	var got []byte
+	tr.OnCapture = func(b []byte) { got = append(got, b...) }
+	tr.Capture.Store(true)
+	out, acts := tr.Feed([]byte("api\x1d\r"))
+	if len(out) != 0 || len(acts) != 0 || string(got) != "api\x1d\r" {
+		t.Fatalf("got %q %v, captured %q", out, acts, got)
+	}
+	tr.Capture.Store(false)
+	if out, _ := tr.Feed([]byte("ls")); string(out) != "ls" {
+		t.Fatalf("got %q", out)
+	}
+}
+
+func TestFeedResizeKeys(t *testing.T) {
+	tr := NewTranslator(0, nil)
+	in := []byte{DefaultPrefix, 0x1b, '[', 'D', DefaultPrefix, 0x1b, 'O', 'A', DefaultPrefix, 'J', DefaultPrefix, 'L'}
+	out, acts := tr.Feed(in)
+	want := []Action{ActionResizeLeft, ActionResizeUp, ActionResizeDown, ActionResizeRight}
+	if len(out) != 0 || !slices.Equal(commands(acts), want) {
+		t.Fatalf("out %q actions %v", out, commands(acts))
+	}
+}

@@ -7,7 +7,10 @@
 // history navigation and reverse search.
 package input
 
-import "bytes"
+import (
+	"bytes"
+	"sync/atomic"
+)
 
 // Action is a TUI command triggered via the prefix key or a reserved key.
 type Action int
@@ -21,7 +24,33 @@ const (
 	ActionScrollReset    // any key sent to the shell returns to the live view
 	ActionPrefixArmed    // prefix pressed, waiting for a command key
 	ActionPrefixDone     // the key after the prefix was consumed
+	ActionNewTab
+	ActionNextTab
+	ActionPrevTab
+	ActionRenameTab
+	ActionCloseTab
+	ActionSearch
+	ActionSplitRight // new pane side by side
+	ActionSplitDown  // new pane below
+	ActionNextPane
+	ActionZoomPane
+	ActionResizeLeft // prefix + arrow (or H/J/K/L): move a pane divider
+	ActionResizeRight
+	ActionResizeUp
+	ActionResizeDown
 )
+
+// ActionSelectTab is the first of nine actions selecting tabs 1..9
+// (ActionSelectTab+0 is tab 1).
+const ActionSelectTab Action = 100
+
+// SelectedTab returns the 0-based tab an action selects, or -1.
+func (a Action) SelectedTab() int {
+	if a >= ActionSelectTab && a < ActionSelectTab+9 {
+		return int(a - ActionSelectTab)
+	}
+	return -1
+}
 
 // DefaultPrefix is Ctrl+] (0x1d), rarely used by shells or editors.
 const DefaultPrefix byte = 0x1d
@@ -50,6 +79,12 @@ type State interface {
 type Translator struct {
 	Prefix byte
 	State  State // may be nil
+	// OnMouse receives mouse reports; they are never forwarded as keys.
+	OnMouse func(MouseEvent)
+	// Capture, while set, diverts every chunk to OnCapture instead of the
+	// shell (used to type a tab name).
+	Capture   atomic.Bool
+	OnCapture func([]byte)
 
 	armed   bool
 	inPaste bool // between paste markers: content is never interpreted
@@ -65,6 +100,10 @@ func NewTranslator(prefix byte, state State) *Translator {
 
 // Feed processes one chunk read from the real terminal.
 func (t *Translator) Feed(chunk []byte) (out []byte, actions []Action) {
+	if t.Capture.Load() && t.OnCapture != nil {
+		t.OnCapture(bytes.Clone(chunk))
+		return nil, nil
+	}
 	out = make([]byte, 0, len(chunk))
 	alt := t.State != nil && t.State.AltScreen()
 	bracketed := t.State != nil && t.State.BracketedPaste()
@@ -94,6 +133,11 @@ func (t *Translator) Feed(chunk []byte) (out []byte, actions []Action) {
 		if t.armed {
 			t.armed = false
 			actions = append(actions, ActionPrefixDone)
+			if c == 0x1b && isArrow(chunk[i:]) {
+				actions = append(actions, arrowResize[chunk[i+2]])
+				i += 2
+				continue
+			}
 			switch c {
 			case 'q', 'Q':
 				actions = append(actions, ActionQuit)
@@ -101,6 +145,36 @@ func (t *Translator) Feed(chunk []byte) (out []byte, actions []Action) {
 				actions = append(actions, ActionToggleSidebar)
 			case '?', 'h':
 				actions = append(actions, ActionToggleHelp)
+			case 'c':
+				actions = append(actions, ActionNewTab)
+			case 'n':
+				actions = append(actions, ActionNextTab)
+			case 'p':
+				actions = append(actions, ActionPrevTab)
+			case 'r':
+				actions = append(actions, ActionRenameTab)
+			case 'x':
+				actions = append(actions, ActionCloseTab)
+			case '/':
+				actions = append(actions, ActionSearch)
+			case '|', '%':
+				actions = append(actions, ActionSplitRight)
+			case '-', '"':
+				actions = append(actions, ActionSplitDown)
+			case 'o':
+				actions = append(actions, ActionNextPane)
+			case 'z':
+				actions = append(actions, ActionZoomPane)
+			case 'H':
+				actions = append(actions, ActionResizeLeft)
+			case 'L':
+				actions = append(actions, ActionResizeRight)
+			case 'K':
+				actions = append(actions, ActionResizeUp)
+			case 'J':
+				actions = append(actions, ActionResizeDown)
+			case '1', '2', '3', '4', '5', '6', '7', '8', '9':
+				actions = append(actions, ActionSelectTab+Action(c-'1'))
 			case t.Prefix:
 				out = append(out, t.Prefix) // double prefix sends it literally
 			}
@@ -109,6 +183,13 @@ func (t *Translator) Feed(chunk []byte) (out []byte, actions []Action) {
 		if c == t.Prefix {
 			t.armed = true
 			actions = append(actions, ActionPrefixArmed)
+			continue
+		}
+		if ev, n, ok := parseSGRMouse(chunk[i:]); ok {
+			if t.OnMouse != nil {
+				t.OnMouse(ev)
+			}
+			i += n - 1
 			continue
 		}
 		if c == 0x1b && !alt {
@@ -142,6 +223,16 @@ func (t *Translator) InPaste() bool { return t.inPaste }
 
 // Armed reports whether the prefix key is waiting for a command.
 func (t *Translator) Armed() bool { return t.armed }
+
+// arrowResize maps the final byte of an arrow key to its resize action.
+var arrowResize = map[byte]Action{
+	'A': ActionResizeUp, 'B': ActionResizeDown, 'C': ActionResizeRight, 'D': ActionResizeLeft,
+}
+
+// isArrow matches an arrow key in CSI (ESC [ A) or SS3 (ESC O A) form.
+func isArrow(b []byte) bool {
+	return len(b) >= 3 && b[0] == 0x1b && (b[1] == '[' || b[1] == 'O') && arrowResize[b[2]] != 0
+}
 
 // isCSIArrow matches ESC [ {A,B,C,D,H,F}, which DECCKM turns into SS3.
 func isCSIArrow(b []byte) bool {

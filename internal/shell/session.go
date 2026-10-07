@@ -8,41 +8,55 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"strconv"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/vt"
 	"github.com/creack/pty"
+	"golang.org/x/sys/unix"
 )
 
-// ScrollbackLines is how many lines scrolled off the top are kept.
-const ScrollbackLines = 10000
+// cwdTTL is how long a looked-up working directory is reused.
+const cwdTTL = 500 * time.Millisecond
 
 // Session is a shell process attached to a PTY plus its emulated screen.
 type Session struct {
 	cmd *exec.Cmd
 	pty *os.File
 
-	mu         sync.Mutex // guards emu, cols, rows, scroll, title
+	mu         sync.Mutex // guards emu, cols, rows, scroll, title, sel and search
 	emu        *vt.Emulator
 	cols, rows int
 	scroll     int // lines scrolled back into history; 0 = live view
 	title      string
+	sel        selection
+	searching  bool // a search is in progress; found is its current match
+	found      point
 
 	appCursor     atomic.Bool
 	bracketed     atomic.Bool
 	cursorVisible atomic.Bool
 	altScreen     atomic.Bool
+	mouseMode     atomic.Int32 // inner mouse tracking: 0, 9, 1000, 1002 or 1003
+	mouseSGR      atomic.Bool
+	outputs       atomic.Uint64 // chunks read from the shell, for activity marks
+	resizedAt     atomic.Int64  // unix nanos of the last effective resize
+
+	cwdMu sync.Mutex // guards cwd and cwdAt
+	cwd   string
+	cwdAt time.Time
 
 	updates chan struct{}
 	done    chan struct{}
 	err     error
 }
 
-// Start launches shellPath (e.g. /bin/bash) in a new PTY of cols x rows.
-func Start(shellPath string, cols, rows int) (*Session, error) {
+// Start launches shellPath (e.g. /bin/bash) in a new PTY of cols x rows,
+// keeping up to scrollback lines of history. dir is the starting directory;
+// empty or missing means the current one.
+func Start(shellPath, dir string, cols, rows, scrollback int) (*Session, error) {
 	if cols < 1 {
 		cols = 80
 	}
@@ -51,6 +65,9 @@ func Start(shellPath string, cols, rows int) (*Session, error) {
 	}
 
 	cmd := exec.Command(shellPath, "-i")
+	if fi, err := os.Stat(dir); dir != "" && err == nil && fi.IsDir() {
+		cmd.Dir = dir
+	}
 	cmd.Env = append(os.Environ(), "TERM=xterm-256color", "SUPER_SHELL=1")
 
 	f, err := pty.StartWithSize(cmd, &pty.Winsize{Cols: uint16(cols), Rows: uint16(rows)})
@@ -69,7 +86,7 @@ func Start(shellPath string, cols, rows int) (*Session, error) {
 	s.cursorVisible.Store(true)
 
 	s.emu = vt.NewEmulator(cols, rows)
-	s.emu.SetScrollbackSize(ScrollbackLines)
+	s.emu.SetScrollbackSize(scrollback)
 	s.emu.SetCallbacks(vt.Callbacks{
 		Title:            func(t string) { s.title = t },
 		AltScreen:        func(on bool) { s.altScreen.Store(on) },
@@ -92,6 +109,15 @@ func (s *Session) setMode(m ansi.Mode, on bool) {
 		s.appCursor.Store(on)
 	case ansi.ModeBracketedPaste:
 		s.bracketed.Store(on)
+	case ansi.ModeMouseExtSgr:
+		s.mouseSGR.Store(on)
+	case ansi.ModeMouseX10, ansi.ModeMouseNormal, ansi.ModeMouseButtonEvent, ansi.ModeMouseAnyEvent:
+		code := int32(m.Mode())
+		if on {
+			s.mouseMode.Store(code)
+		} else {
+			s.mouseMode.CompareAndSwap(code, 0)
+		}
 	}
 }
 
@@ -104,6 +130,7 @@ func (s *Session) readLoop() {
 			s.mu.Lock()
 			_, _ = s.emu.Write(buf[:n])
 			s.mu.Unlock()
+			s.outputs.Add(1)
 			s.notify()
 		}
 		if err != nil {
@@ -126,6 +153,16 @@ func (s *Session) notify() {
 
 // Write sends raw bytes (keystrokes) straight to the shell's PTY.
 func (s *Session) Write(p []byte) (int, error) { return s.pty.Write(p) }
+
+// Outputs counts chunks of shell output; it changes only on real output,
+// not on redraws caused by scrolling, selection or resizing.
+func (s *Session) Outputs() uint64 { return s.outputs.Load() }
+
+// SinceResize returns the time elapsed since the last resize. Shells redraw
+// their prompt on SIGWINCH, which should not count as new activity.
+func (s *Session) SinceResize() time.Duration {
+	return time.Duration(time.Now().UnixNano() - s.resizedAt.Load())
+}
 
 // Updates fires whenever the screen changed.
 func (s *Session) Updates() <-chan struct{} { return s.updates }
@@ -157,12 +194,30 @@ func (s *Session) Resize(cols, rows int) error {
 		return nil
 	}
 	s.cols, s.rows = cols, rows
+	s.resizedAt.Store(time.Now().UnixNano())
 	s.emu.Resize(cols, rows)
 	s.scroll = min(s.scroll, s.emu.ScrollbackLen())
 	s.mu.Unlock()
 
-	err := pty.Setsize(s.pty, &pty.Winsize{Cols: uint16(cols), Rows: uint16(rows)})
+	err := s.setWinsize(cols, rows)
 	s.notify()
+	return err
+}
+
+// setWinsize resizes the PTY, which sends SIGWINCH to the shell. It goes
+// through SyscallConn rather than pty.Setsize: File.Fd would race with Close
+// and switch the PTY to blocking mode.
+func (s *Session) setWinsize(cols, rows int) error {
+	conn, err := s.pty.SyscallConn()
+	if err != nil {
+		return err
+	}
+	cerr := conn.Control(func(fd uintptr) {
+		err = unix.IoctlSetWinsize(int(fd), unix.TIOCSWINSZ, &unix.Winsize{Col: uint16(cols), Row: uint16(rows)})
+	})
+	if cerr != nil {
+		return cerr
+	}
 	return err
 }
 
@@ -183,13 +238,17 @@ func (s *Session) Title() string {
 	return s.title
 }
 
-// Cwd returns the shell's working directory (Linux only, best effort).
+// Cwd returns the shell's working directory (best effort, "" if unknown).
+// The lookup can be slow on some systems (macOS runs lsof), so the value is
+// cached briefly: it is read on every redraw for tab titles.
 func (s *Session) Cwd() string {
-	dir, err := os.Readlink("/proc/" + strconv.Itoa(s.Pid()) + "/cwd")
-	if err != nil {
-		return ""
+	s.cwdMu.Lock()
+	defer s.cwdMu.Unlock()
+	if time.Since(s.cwdAt) < cwdTTL {
+		return s.cwd
 	}
-	return dir
+	s.cwd, s.cwdAt = processCwd(s.Pid()), time.Now()
+	return s.cwd
 }
 
 // ScrollBy moves the view n lines back into history (negative goes forward).
@@ -235,6 +294,10 @@ func (s *Session) Close() error {
 	if s.cmd.Process != nil {
 		_ = s.cmd.Process.Signal(os.Kill)
 	}
-	_ = s.emu.Close()
+	// Stop the reply-draining goroutine. Closing the pipe directly instead of
+	// calling emu.Close avoids racing on the emulator's unsynchronized flag.
+	if pw, ok := s.emu.InputPipe().(*io.PipeWriter); ok {
+		_ = pw.Close()
+	}
 	return s.pty.Close()
 }
