@@ -86,7 +86,8 @@ type State interface {
 // Translator turns raw stdin chunks into bytes for the PTY plus TUI actions.
 type Translator struct {
 	Prefix byte
-	State  State // may be nil
+	Keys   Bindings // keys after the prefix; NewTranslator sets the defaults
+	State  State    // may be nil
 	// OnMouse receives mouse reports; they are never forwarded as keys.
 	OnMouse func(MouseEvent)
 	// Capture, while set, diverts every chunk to OnCapture instead of the
@@ -104,7 +105,7 @@ func NewTranslator(prefix byte, state State) *Translator {
 	if prefix == 0 {
 		prefix = DefaultPrefix
 	}
-	return &Translator{Prefix: prefix, State: state}
+	return &Translator{Prefix: prefix, Keys: DefaultBindings(), State: state}
 }
 
 // Feed processes one chunk read from the real terminal.
@@ -168,47 +169,11 @@ func (t *Translator) Feed(chunk []byte) (out []byte, actions []Action) {
 				i += n - 1
 				continue
 			}
+			if a := t.Keys.Action(c); a != 0 {
+				actions = append(actions, a)
+				continue
+			}
 			switch c {
-			case 'q', 'Q':
-				actions = append(actions, ActionQuit)
-			case 's', 'S':
-				actions = append(actions, ActionToggleSidebar)
-			case '?':
-				actions = append(actions, ActionToggleHelp)
-			case 'c':
-				actions = append(actions, ActionNewTab)
-			case 'n':
-				actions = append(actions, ActionNextTab)
-			case 'p':
-				actions = append(actions, ActionPrevTab)
-			case 'r':
-				actions = append(actions, ActionRenameTab)
-			case 'x':
-				actions = append(actions, ActionCloseTab)
-			case '/':
-				actions = append(actions, ActionSearch)
-			case '|', '%':
-				actions = append(actions, ActionSplitRight)
-			case '-', '"':
-				actions = append(actions, ActionSplitDown)
-			case 'o':
-				actions = append(actions, ActionNextPane)
-			case 'z':
-				actions = append(actions, ActionZoomPane)
-			case '=':
-				actions = append(actions, ActionEqualizePanes)
-			case '}':
-				actions = append(actions, ActionSwapPaneNext)
-			case '{':
-				actions = append(actions, ActionSwapPanePrev)
-			case 'h':
-				actions = append(actions, ActionFocusLeft)
-			case 'j':
-				actions = append(actions, ActionFocusDown)
-			case 'k':
-				actions = append(actions, ActionFocusUp)
-			case 'l':
-				actions = append(actions, ActionFocusRight)
 			case '1', '2', '3', '4', '5', '6', '7', '8', '9':
 				actions = append(actions, ActionSelectTab+Action(c-'1'))
 			case t.Prefix:

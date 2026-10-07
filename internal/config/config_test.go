@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -35,7 +36,7 @@ func TestLoad(t *testing.T) {
 	dir := t.TempDir()
 
 	cfg, err := Load(filepath.Join(dir, "missing.toml"))
-	if err != nil || cfg != Default() {
+	if err != nil || !isDefault(cfg) {
 		t.Fatalf("missing file: %+v %v", cfg, err)
 	}
 
@@ -43,7 +44,7 @@ func TestLoad(t *testing.T) {
 	if err := WriteSample(path); err != nil {
 		t.Fatal(err)
 	}
-	if cfg, err := Load(path); err != nil || cfg != Default() {
+	if cfg, err := Load(path); err != nil || !isDefault(cfg) {
 		t.Fatalf("sample should equal defaults: %+v %v", cfg, err)
 	}
 	if err := WriteSample(path); err == nil {
@@ -62,9 +63,24 @@ func TestLoad(t *testing.T) {
 	if cfg.Prefix != "ctrl+a" || cfg.Sidebar || cfg.SidebarWidth != 30 || cfg.Colors.Accent != "#ff8800" {
 		t.Fatalf("partial file: %+v", cfg)
 	}
-	for _, bad := range []string{"sidebar_width = 5", "scrollback = -1", "prefix = \"ctrl+[\"", "[colors]\naccent = \"red\"", "typo = 1", "restore_command = \"yes\""} {
+	if err := write("[keys]\nsplit_right = \"v\"\n"); err != nil {
+		t.Fatal(err)
+	}
+	if cfg, _ = Load(path); cfg.Keys["split_right"] != "v" {
+		t.Fatalf("keys: %+v", cfg.Keys)
+	}
+	for _, bad := range []string{"sidebar_width = 5", "scrollback = -1", "prefix = \"ctrl+[\"", "[colors]\naccent = \"red\"", "typo = 1", "restore_command = \"yes\"",
+		"[keys]\nsplit_right = \"c\"", "[keys]\nnope = \"v\"", "[keys]\nzoom = \"5\""} {
 		if err := write(bad); err == nil || !strings.Contains(err.Error(), path) {
 			t.Errorf("%q: want error naming the file, got %v", bad, err)
 		}
 	}
+}
+
+// isDefault compares with Default; an empty [keys] table counts as none.
+func isDefault(cfg Config) bool {
+	if len(cfg.Keys) == 0 {
+		cfg.Keys = nil
+	}
+	return reflect.DeepEqual(cfg, Default())
 }
