@@ -12,6 +12,7 @@ import (
 
 	"github.com/madkoding/super-shell-tui/internal/input"
 	"github.com/madkoding/super-shell-tui/internal/shell"
+	"github.com/madkoding/super-shell-tui/internal/workspace"
 )
 
 // ActionMsg carries a prefix-key action from the input pump.
@@ -23,8 +24,6 @@ type MouseMsg input.MouseEvent
 type clearFlashMsg struct{ id int }
 
 type screenMsg struct{}
-
-type exitMsg struct{ err error }
 
 // Options are the user settings the model needs.
 type Options struct {
@@ -38,7 +37,8 @@ type Options struct {
 
 // Model is the root Bubble Tea model.
 type Model struct {
-	sess   *shell.Session
+	ws     *workspace.Workspace
+	sess   *shell.Session // active tab, refreshed on every update
 	opts   Options
 	styles styles
 
@@ -53,14 +53,13 @@ type Model struct {
 
 	// Clipboard copies text to the system clipboard (OSC 52 by default).
 	Clipboard func(string)
-
-	Err error
 }
 
 // New builds the model around a running shell session.
-func New(sess *shell.Session, opts Options) *Model {
+func New(ws *workspace.Workspace, opts Options) *Model {
 	return &Model{
-		sess:        sess,
+		ws:          ws,
+		sess:        ws.Active(),
 		opts:        opts,
 		styles:      newStyles(opts.Accent, opts.Muted),
 		showSidebar: opts.ShowSidebar,
@@ -71,16 +70,15 @@ func (m *Model) Init() tea.Cmd { return m.waitScreen() }
 
 func (m *Model) waitScreen() tea.Cmd {
 	return func() tea.Msg {
-		select {
-		case <-m.sess.Updates():
-			return screenMsg{}
-		case <-m.sess.Done():
-			return exitMsg{err: m.sess.Err()}
-		}
+		<-m.ws.Changed()
+		return screenMsg{}
 	}
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if m.sess = m.ws.Active(); m.sess == nil {
+		return m, tea.Quit // the last shell exited
+	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
@@ -88,9 +86,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case screenMsg:
 		m.cwd = m.sess.Cwd()
 		return m, m.waitScreen()
-	case exitMsg:
-		m.Err = msg.err
-		return m, tea.Quit
 	case MouseMsg:
 		return m, m.handleMouse(input.MouseEvent(msg))
 	case clearFlashMsg:
@@ -105,6 +100,19 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.prefixArmed = false
 		case input.ActionQuit:
 			return m, tea.Quit
+		case input.ActionNewTab:
+			m.selecting = false
+			if err := m.ws.NewTab(); err != nil {
+				return m, m.setFlash("No se pudo abrir la pestaña: " + err.Error())
+			}
+		case input.ActionNextTab:
+			m.switchTab(m.ws.Next)
+		case input.ActionPrevTab:
+			m.switchTab(m.ws.Prev)
+		default:
+			if i := input.Action(msg).SelectedTab(); i >= 0 {
+				m.switchTab(func() { m.ws.Select(i) })
+			}
 		case input.ActionToggleSidebar:
 			m.showSidebar = !m.showSidebar
 			m.resizeShell()
@@ -133,11 +141,11 @@ func (m *Model) resizeShell() {
 	if m.width == 0 || m.height == 0 {
 		return
 	}
-	_ = m.sess.Resize(m.paneSize())
+	m.ws.Resize(m.paneSize())
 }
 
 func (m *Model) View() string {
-	if m.width == 0 {
+	if m.width == 0 || m.sess == nil {
 		return ""
 	}
 	cols, rows := m.paneSize()
@@ -147,11 +155,7 @@ func (m *Model) View() string {
 		return style.Width(m.width).MaxWidth(m.width).Render(text)
 	}
 
-	title := "Super Shell"
-	if t := m.sess.Title(); t != "" {
-		title += " · " + t
-	}
-	header := bar(st.header, title)
+	header := m.tabBar()
 
 	pane := st.pane.Width(cols).Height(rows).Render(m.sess.Render(true))
 	body := pane
@@ -164,7 +168,7 @@ func (m *Model) View() string {
 	if m.flash != "" {
 		status = bar(st.scroll, m.flash)
 	} else if m.prefixArmed {
-		status = bar(st.armed, fmt.Sprintf("%[1]s … ?  ayuda · s  panel · q  salir · %[1]s  enviar %[1]s · otra tecla cancela", pfx))
+		status = bar(st.armed, fmt.Sprintf("%[1]s … ?  ayuda · c  nueva pestaña · n/p  cambiar · 1-9  ir · s  panel · q  salir · %[1]s  enviar %[1]s", pfx))
 	} else if off, history := m.sess.ScrollOffset(); off > 0 {
 		status = bar(st.scroll, fmt.Sprintf("Historial: %d/%d líneas arriba · Shift+PgDn bajar · cualquier tecla vuelve", off, history))
 	}
@@ -181,6 +185,9 @@ func (m *Model) sidebar() string {
 			"?  mostrar/ocultar ayuda",
 			"s  mostrar/ocultar panel",
 			"q  salir",
+			"c  nueva pestaña",
+			"n / p  siguiente / anterior",
+			"1-9  ir a la pestaña",
 			pfx + "  enviarlo al shell",
 			"",
 			st.label.Render("Historial"),
@@ -205,10 +212,40 @@ func (m *Model) sidebar() string {
 	line := func(k, v string) string {
 		return st.label.Render(k) + "\n" + st.value.Render(truncLeft(v, w)) + "\n"
 	}
-	return line("Shell", m.opts.ShellPath) +
+	return line("Pestaña", fmt.Sprintf("%d de %d", m.ws.ActiveIndex()+1, m.ws.Len())) +
+		line("Shell", m.opts.ShellPath) +
 		line("PID", fmt.Sprint(m.sess.Pid())) +
 		line("Tamaño", fmt.Sprintf("%dx%d", cols, rows)) +
 		line("Directorio", m.cwd)
+}
+
+// switchTab runs a tab change and drops any in-progress mouse selection.
+func (m *Model) switchTab(change func()) {
+	m.selecting = false
+	m.sess.ClearSelection()
+	change()
+	m.sess = m.ws.Active()
+	m.cwd = m.sess.Cwd()
+}
+
+// tabBar renders the header: the app name followed by one label per tab.
+// Background tabs with new output are marked with a dot.
+func (m *Model) tabBar() string {
+	st := m.styles
+	parts := []string{"Super Shell"}
+	for i, t := range m.ws.Tabs() {
+		label := fmt.Sprintf("%d:%s", i+1, t.Title)
+		switch {
+		case t.Active:
+			label = "[" + label + "]"
+		case t.Activity:
+			label = " " + label + "•"
+		default:
+			label = " " + label + " "
+		}
+		parts = append(parts, label)
+	}
+	return st.header.Width(m.width).MaxWidth(m.width).Render(strings.Join(parts, " "))
 }
 
 // truncLeft keeps the tail of s so long paths show their last segments.

@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/vt"
@@ -35,6 +36,8 @@ type Session struct {
 	altScreen     atomic.Bool
 	mouseMode     atomic.Int32 // inner mouse tracking: 0, 9, 1000, 1002 or 1003
 	mouseSGR      atomic.Bool
+	outputs       atomic.Uint64 // chunks read from the shell, for activity marks
+	resizedAt     atomic.Int64  // unix nanos of the last effective resize
 
 	updates chan struct{}
 	done    chan struct{}
@@ -114,6 +117,7 @@ func (s *Session) readLoop() {
 			s.mu.Lock()
 			_, _ = s.emu.Write(buf[:n])
 			s.mu.Unlock()
+			s.outputs.Add(1)
 			s.notify()
 		}
 		if err != nil {
@@ -136,6 +140,16 @@ func (s *Session) notify() {
 
 // Write sends raw bytes (keystrokes) straight to the shell's PTY.
 func (s *Session) Write(p []byte) (int, error) { return s.pty.Write(p) }
+
+// Outputs counts chunks of shell output; it changes only on real output,
+// not on redraws caused by scrolling, selection or resizing.
+func (s *Session) Outputs() uint64 { return s.outputs.Load() }
+
+// SinceResize returns the time elapsed since the last resize. Shells redraw
+// their prompt on SIGWINCH, which should not count as new activity.
+func (s *Session) SinceResize() time.Duration {
+	return time.Duration(time.Now().UnixNano() - s.resizedAt.Load())
+}
 
 // Updates fires whenever the screen changed.
 func (s *Session) Updates() <-chan struct{} { return s.updates }
@@ -167,6 +181,7 @@ func (s *Session) Resize(cols, rows int) error {
 		return nil
 	}
 	s.cols, s.rows = cols, rows
+	s.resizedAt.Store(time.Now().UnixNano())
 	s.emu.Resize(cols, rows)
 	s.scroll = min(s.scroll, s.emu.ScrollbackLen())
 	s.mu.Unlock()
@@ -245,6 +260,10 @@ func (s *Session) Close() error {
 	if s.cmd.Process != nil {
 		_ = s.cmd.Process.Signal(os.Kill)
 	}
-	_ = s.emu.Close()
+	// Stop the reply-draining goroutine. Closing the pipe directly instead of
+	// calling emu.Close avoids racing on the emulator's unsynchronized flag.
+	if pw, ok := s.emu.InputPipe().(*io.PipeWriter); ok {
+		_ = pw.Close()
+	}
 	return s.pty.Close()
 }
