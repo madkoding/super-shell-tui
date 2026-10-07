@@ -66,6 +66,7 @@ que indica el archivo y la clave.
 | `Ctrl+] c`   | Nueva pestaña de shell       |
 | `Ctrl+] n` / `Ctrl+] p` | Pestaña siguiente / anterior |
 | `Ctrl+] 1`…`9` | Ir a la pestaña N          |
+| `Ctrl+] r`   | Renombrar la pestaña (Enter guarda, Esc cancela, vacío = automático) |
 | `Ctrl+] Ctrl+]` | Enviar `Ctrl+]` al shell  |
 
 Cualquier otra tecla va directo al shell.

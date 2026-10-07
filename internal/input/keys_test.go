@@ -150,3 +150,21 @@ func TestFeedTabCommands(t *testing.T) {
 		t.Fatalf("got %v", got)
 	}
 }
+
+func TestFeedCapture(t *testing.T) {
+	tr := NewTranslator(0, nil)
+	if _, acts := tr.Feed([]byte{DefaultPrefix, 'r'}); !slices.Equal(commands(acts), []Action{ActionRenameTab}) {
+		t.Fatalf("got %v", acts)
+	}
+	var got []byte
+	tr.OnCapture = func(b []byte) { got = append(got, b...) }
+	tr.Capture.Store(true)
+	out, acts := tr.Feed([]byte("api\x1d\r"))
+	if len(out) != 0 || len(acts) != 0 || string(got) != "api\x1d\r" {
+		t.Fatalf("got %q %v, captured %q", out, acts, got)
+	}
+	tr.Capture.Store(false)
+	if out, _ := tr.Feed([]byte("ls")); string(out) != "ls" {
+		t.Fatalf("got %q", out)
+	}
+}

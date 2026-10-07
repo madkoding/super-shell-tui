@@ -20,13 +20,15 @@ const resizeQuiet = 500 * time.Millisecond
 
 // Tab describes a tab for the tab bar.
 type Tab struct {
-	Title    string
+	Title    string // Name, or the working directory when unnamed
+	Name     string // user-given name, empty when automatic
 	Active   bool
 	Activity bool // output arrived while in the background
 }
 
 type tab struct {
 	sess     *shell.Session
+	name     string // set by the user; empty means automatic
 	activity bool
 }
 
@@ -174,6 +176,16 @@ func (w *Workspace) Select(i int) {
 	w.notify()
 }
 
+// RenameActive sets the active tab's name; "" restores the automatic title.
+func (w *Workspace) RenameActive(name string) {
+	w.mu.Lock()
+	if len(w.tabs) > 0 {
+		w.tabs[w.active].name = name
+	}
+	w.mu.Unlock()
+	w.notify()
+}
+
 // Next and Prev cycle through tabs.
 func (w *Workspace) Next() { w.cycle(1) }
 func (w *Workspace) Prev() { w.cycle(-1) }
@@ -194,7 +206,11 @@ func (w *Workspace) Tabs() []Tab {
 	defer w.mu.Unlock()
 	out := make([]Tab, len(w.tabs))
 	for i, t := range w.tabs {
-		out[i] = Tab{Title: title(t.sess, i), Active: i == w.active, Activity: t.activity}
+		name := t.name
+		if name == "" {
+			name = title(t.sess, i)
+		}
+		out[i] = Tab{Title: name, Name: t.name, Active: i == w.active, Activity: t.activity}
 	}
 	return out
 }

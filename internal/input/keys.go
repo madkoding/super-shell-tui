@@ -7,7 +7,10 @@
 // history navigation and reverse search.
 package input
 
-import "bytes"
+import (
+	"bytes"
+	"sync/atomic"
+)
 
 // Action is a TUI command triggered via the prefix key or a reserved key.
 type Action int
@@ -24,6 +27,7 @@ const (
 	ActionNewTab
 	ActionNextTab
 	ActionPrevTab
+	ActionRenameTab
 )
 
 // ActionSelectTab is the first of nine actions selecting tabs 1..9
@@ -67,6 +71,10 @@ type Translator struct {
 	State  State // may be nil
 	// OnMouse receives mouse reports; they are never forwarded as keys.
 	OnMouse func(MouseEvent)
+	// Capture, while set, diverts every chunk to OnCapture instead of the
+	// shell (used to type a tab name).
+	Capture   atomic.Bool
+	OnCapture func([]byte)
 
 	armed   bool
 	inPaste bool // between paste markers: content is never interpreted
@@ -82,6 +90,10 @@ func NewTranslator(prefix byte, state State) *Translator {
 
 // Feed processes one chunk read from the real terminal.
 func (t *Translator) Feed(chunk []byte) (out []byte, actions []Action) {
+	if t.Capture.Load() && t.OnCapture != nil {
+		t.OnCapture(bytes.Clone(chunk))
+		return nil, nil
+	}
 	out = make([]byte, 0, len(chunk))
 	alt := t.State != nil && t.State.AltScreen()
 	bracketed := t.State != nil && t.State.BracketedPaste()
@@ -124,6 +136,8 @@ func (t *Translator) Feed(chunk []byte) (out []byte, actions []Action) {
 				actions = append(actions, ActionNextTab)
 			case 'p':
 				actions = append(actions, ActionPrevTab)
+			case 'r':
+				actions = append(actions, ActionRenameTab)
 			case '1', '2', '3', '4', '5', '6', '7', '8', '9':
 				actions = append(actions, ActionSelectTab+Action(c-'1'))
 			case t.Prefix:
