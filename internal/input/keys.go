@@ -38,6 +38,7 @@ const (
 	ActionResizeRight
 	ActionResizeUp
 	ActionResizeDown
+	ActionResizeMode // after a resize: arrows and H/J/K/L keep resizing
 )
 
 // ActionSelectTab is the first of nine actions selecting tabs 1..9
@@ -86,8 +87,9 @@ type Translator struct {
 	Capture   atomic.Bool
 	OnCapture func([]byte)
 
-	armed   bool
-	inPaste bool // between paste markers: content is never interpreted
+	armed    bool
+	resizing bool // resize mode: see ActionResizeMode
+	inPaste  bool // between paste markers: content is never interpreted
 }
 
 // NewTranslator returns a Translator using prefix (0 means DefaultPrefix).
@@ -119,6 +121,10 @@ func (t *Translator) Feed(chunk []byte) (out []byte, actions []Action) {
 			if bytes.HasPrefix(rest, marker) {
 				t.inPaste = !t.inPaste
 				t.armed = false
+				if t.resizing {
+					t.resizing = false
+					actions = append(actions, ActionPrefixDone)
+				}
 				if bracketed {
 					out = append(out, marker...)
 				}
@@ -130,12 +136,29 @@ func (t *Translator) Feed(chunk []byte) (out []byte, actions []Action) {
 			out = append(out, c)
 			continue
 		}
+		if t.resizing {
+			if a, n := resizeKey(chunk[i:]); a != 0 {
+				actions = append(actions, a)
+				i += n - 1
+				continue
+			}
+			// Any other key ends the mode (mouse reports don't); Enter and a
+			// lone Esc only do that.
+			if _, _, mouse := parseSGRMouse(chunk[i:]); !mouse {
+				t.resizing = false
+				actions = append(actions, ActionPrefixDone)
+				if c == '\r' || c == 0x1b && i == len(chunk)-1 {
+					continue
+				}
+			}
+		}
 		if t.armed {
 			t.armed = false
 			actions = append(actions, ActionPrefixDone)
-			if c == 0x1b && isArrow(chunk[i:]) {
-				actions = append(actions, arrowResize[chunk[i+2]])
-				i += 2
+			if a, n := resizeKey(chunk[i:]); a != 0 {
+				t.resizing = true
+				actions = append(actions, a, ActionResizeMode)
+				i += n - 1
 				continue
 			}
 			switch c {
@@ -165,14 +188,6 @@ func (t *Translator) Feed(chunk []byte) (out []byte, actions []Action) {
 				actions = append(actions, ActionNextPane)
 			case 'z':
 				actions = append(actions, ActionZoomPane)
-			case 'H':
-				actions = append(actions, ActionResizeLeft)
-			case 'L':
-				actions = append(actions, ActionResizeRight)
-			case 'K':
-				actions = append(actions, ActionResizeUp)
-			case 'J':
-				actions = append(actions, ActionResizeDown)
 			case '1', '2', '3', '4', '5', '6', '7', '8', '9':
 				actions = append(actions, ActionSelectTab+Action(c-'1'))
 			case t.Prefix:
@@ -227,6 +242,25 @@ func (t *Translator) Armed() bool { return t.armed }
 // arrowResize maps the final byte of an arrow key to its resize action.
 var arrowResize = map[byte]Action{
 	'A': ActionResizeUp, 'B': ActionResizeDown, 'C': ActionResizeRight, 'D': ActionResizeLeft,
+}
+
+// resizeKey returns the resize action of an arrow key or H/J/K/L at the
+// start of b and its length, or 0.
+func resizeKey(b []byte) (Action, int) {
+	if isArrow(b) {
+		return arrowResize[b[2]], 3
+	}
+	switch b[0] {
+	case 'H':
+		return ActionResizeLeft, 1
+	case 'L':
+		return ActionResizeRight, 1
+	case 'K':
+		return ActionResizeUp, 1
+	case 'J':
+		return ActionResizeDown, 1
+	}
+	return 0, 0
 }
 
 // isArrow matches an arrow key in CSI (ESC [ A) or SS3 (ESC O A) form.
