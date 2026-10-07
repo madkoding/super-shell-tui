@@ -69,7 +69,7 @@ func TestLoad(t *testing.T) {
 	if cfg, _ = Load(path); cfg.Keys["split_right"] != "v" {
 		t.Fatalf("keys: %+v", cfg.Keys)
 	}
-	for _, bad := range []string{"sidebar_width = 5", "scrollback = -1", "prefix = \"ctrl+[\"", "[colors]\naccent = \"red\"", "typo = 1", "restore_command = \"yes\"",
+	for _, bad := range []string{"sidebar_width = 5", "scrollback = -1", "prefix = \"ctrl+[\"", "[colors]\naccent = \"red\"", "typo = 1", "restore_command = \"yes\"", "theme = \"blue\"",
 		"[keys]\nsplit_right = \"c\"", "[keys]\nnope = \"v\"", "[keys]\nzoom = \"5\""} {
 		if err := write(bad); err == nil || !strings.Contains(err.Error(), path) {
 			t.Errorf("%q: want error naming the file, got %v", bad, err)

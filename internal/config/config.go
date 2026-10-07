@@ -34,6 +34,9 @@ type Config struct {
 	// RestoreCommand is what to do with the program each restored tab was
 	// running: "off", "type" (left at the prompt) or "run".
 	RestoreCommand string `toml:"restore_command"`
+	// Theme picks the default colors: "auto" follows the terminal
+	// background, "light" or "dark" fix them.
+	Theme string `toml:"theme"`
 	// Colors are hex values ("#9D7CFF"); empty keeps the adaptive defaults.
 	Colors Colors `toml:"colors"`
 	// Keys rebinds commands typed after the prefix: action name to key,
@@ -57,6 +60,7 @@ func Default() Config {
 		RestoreTabs:  true,
 
 		RestoreCommand: "type",
+		Theme:          "auto",
 	}
 }
 
@@ -116,6 +120,11 @@ func (c Config) Validate() error {
 	default:
 		return fmt.Errorf("restore_command must be \"off\", \"type\" or \"run\", got %q", c.RestoreCommand)
 	}
+	switch c.Theme {
+	case "auto", "light", "dark":
+	default:
+		return fmt.Errorf("theme must be \"auto\", \"light\" or \"dark\", got %q", c.Theme)
+	}
 	if _, err := c.Bindings(); err != nil {
 		return err
 	}
@@ -173,6 +182,10 @@ restore_tabs = true
 # "type" leaves it at the prompt for you to press Enter, "run" runs it,
 # "off" ignores it.
 restore_command = "type"
+
+# Default colors: "auto" follows the terminal background, "light" or "dark"
+# fix them (useful when the terminal doesn't report its background).
+theme = "auto"
 
 [colors]
 # Hex colors; leave empty for the defaults that adapt to light/dark terminals.

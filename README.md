@@ -55,6 +55,7 @@ super-shell -config otra.toml     # usa otro archivo
 | `scrollback`    | `10000`     | Líneas de historial por shell (1-100000)         |
 | `restore_tabs`  | `true`      | Reabrir las pestañas de la sesión anterior       |
 | `restore_command` | `type`    | Programa que corría cada pestaña al salir: `type` lo deja escrito, `run` lo ejecuta, `off` lo ignora |
+| `theme`         | `auto`      | Colores por defecto: `auto` (según el fondo de la terminal), `light` o `dark` |
 | `colors.accent` | adaptativo  | Color principal en hex (`#9D7CFF`)               |
 | `colors.muted`  | adaptativo  | Color secundario en hex                          |
 | `keys.<acción>` | —         | Otra tecla para un comando, p. ej. `split_right = "v"` (ver abajo) |

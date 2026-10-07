@@ -36,6 +36,7 @@ type Options struct {
 	SidebarWidth int
 	Accent       string // hex, empty for the default
 	Muted        string
+	Theme        string // "auto", "light" or "dark"
 }
 
 // Model is the root Bubble Tea model.
@@ -77,7 +78,7 @@ func New(ws *workspace.Workspace, opts Options) *Model {
 		ws:          ws,
 		sess:        ws.Active(),
 		opts:        opts,
-		styles:      newStyles(opts.Accent, opts.Muted),
+		styles:      newStyles(opts.Accent, opts.Muted, opts.Theme),
 		showSidebar: opts.ShowSidebar,
 	}
 }

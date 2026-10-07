@@ -89,6 +89,7 @@ func run() error {
 		SidebarWidth: cfg.SidebarWidth,
 		Accent:       cfg.Colors.Accent,
 		Muted:        cfg.Colors.Muted,
+		Theme:        cfg.Theme,
 	})
 	model.Clipboard = ui.OSC52Clipboard
 	// Bubble Tea enables bracketed paste on the real terminal by default;
