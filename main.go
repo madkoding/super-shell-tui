@@ -44,6 +44,7 @@ func run() error {
 		return err
 	}
 	prefix, prefixLabel, _ := config.ParsePrefix(cfg.Prefix) // validated by Load
+	keys, _ := cfg.Bindings()                                // validated by Load
 	shellPath := firstNonEmpty(*shellFlag, cfg.Shell, os.Getenv("SHELL"), "/bin/bash")
 
 	stdin := int(os.Stdin.Fd())
@@ -83,6 +84,7 @@ func run() error {
 	model := ui.New(ws, ui.Options{
 		ShellPath:    shellPath,
 		PrefixLabel:  prefixLabel,
+		Keys:         keys,
 		ShowSidebar:  cfg.Sidebar,
 		SidebarWidth: cfg.SidebarWidth,
 		Accent:       cfg.Colors.Accent,
@@ -96,6 +98,7 @@ func run() error {
 	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithInput(nil), tea.WithMouseCellMotion())
 
 	tr := input.NewTranslator(prefix, ws)
+	tr.Keys = keys
 	tr.OnMouse = func(ev input.MouseEvent) { p.Send(ui.MouseMsg(ev)) }
 	tr.OnCapture = func(b []byte) { p.Send(ui.TextMsg(b)) }
 	model.SetCapture = tr.Capture.Store

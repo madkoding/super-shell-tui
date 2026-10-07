@@ -30,6 +30,7 @@ type screenMsg struct{}
 type Options struct {
 	ShellPath    string
 	PrefixLabel  string // e.g. "Ctrl+]"
+	Keys         input.Bindings
 	ShowSidebar  bool
 	SidebarWidth int
 	Accent       string // hex, empty for the default
@@ -68,6 +69,9 @@ type Model struct {
 
 // New builds the model around a running shell session.
 func New(ws *workspace.Workspace, opts Options) *Model {
+	if opts.Keys.Empty() {
+		opts.Keys = input.DefaultBindings()
+	}
 	return &Model{
 		ws:          ws,
 		sess:        ws.Active(),
@@ -173,7 +177,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case input.ActionZoomPane:
 			if m.ws.PaneCount() < 2 {
-				return m, m.setFlash("El zoom necesita al menos dos paneles (" + m.opts.PrefixLabel + " | para dividir)")
+				return m, m.setFlash("El zoom necesita al menos dos paneles (" + m.opts.PrefixLabel + " " + m.key(input.ActionSplitRight) + " para dividir)")
 			}
 			m.ws.ToggleZoom()
 		default:
@@ -292,7 +296,13 @@ func (m *Model) View() string {
 	} else if m.resizeMode {
 		status = bar(st.armed, "Tamaño: flechas o H/J/K/L mueven el borde · Enter/Esc o cualquier otra tecla terminan")
 	} else if m.prefixArmed {
-		status = bar(st.armed, fmt.Sprintf("%[1]s … ?  ayuda · c  nueva · x  cerrar · n/p  cambiar · 1-9  ir · r  renombrar · /  buscar · |/-  dividir · o/hjkl  panel · z  zoom · !  a pestaña · =  igualar · {/}  mover · flechas  tamaño · s  panel · q  salir · %[1]s  enviar %[1]s", pfx))
+		k := m.key
+		status = bar(st.armed, fmt.Sprintf("%[1]s … %s  ayuda · %s  nueva · %s  cerrar · %s/%s  cambiar · 1-9  ir · %s  renombrar · %s  buscar · %s/%s  dividir · %s/%s%s%s%s  panel · %s  zoom · %s  a pestaña · %s  igualar · %s/%s  mover · flechas  tamaño · %s  panel · %s  salir · %[1]s  enviar %[1]s",
+			pfx, k(input.ActionToggleHelp), k(input.ActionNewTab), k(input.ActionCloseTab), k(input.ActionNextTab), k(input.ActionPrevTab),
+			k(input.ActionRenameTab), k(input.ActionSearch), k(input.ActionSplitRight), k(input.ActionSplitDown),
+			k(input.ActionNextPane), k(input.ActionFocusLeft), k(input.ActionFocusDown), k(input.ActionFocusUp), k(input.ActionFocusRight),
+			k(input.ActionZoomPane), k(input.ActionBreakPane), k(input.ActionEqualizePanes), k(input.ActionSwapPanePrev), k(input.ActionSwapPaneNext),
+			k(input.ActionToggleSidebar), k(input.ActionQuit)))
 	} else if off, history := m.sess.ScrollOffset(); off > 0 {
 		status = bar(st.scroll, fmt.Sprintf("Historial: %d/%d líneas arriba · Shift+PgDn bajar · cualquier tecla vuelve", off, history))
 	}
@@ -300,40 +310,48 @@ func (m *Model) View() string {
 	return lipgloss.JoinVertical(lipgloss.Left, header, body, status)
 }
 
+// key returns the key bound to a for help text, "·" when it has none.
+func (m *Model) key(a input.Action) string {
+	if k := m.opts.Keys.Key(a); k != "" {
+		return k
+	}
+	return "·"
+}
+
 func (m *Model) sidebar() string {
-	st, pfx := m.styles, m.opts.PrefixLabel
+	st, pfx, k := m.styles, m.opts.PrefixLabel, m.key
 	if m.showHelp {
 		return strings.Join([]string{
 			st.label.Render("Atajos (prefijo " + pfx + ")"),
 			"",
-			"?  mostrar/ocultar ayuda",
-			"s  mostrar/ocultar panel",
-			"q  salir",
-			"c  nueva pestaña",
-			"n / p  siguiente / anterior",
+			k(input.ActionToggleHelp) + "  mostrar/ocultar ayuda",
+			k(input.ActionToggleSidebar) + "  mostrar/ocultar panel",
+			k(input.ActionQuit) + "  salir",
+			k(input.ActionNewTab) + "  nueva pestaña",
+			k(input.ActionNextTab) + " / " + k(input.ActionPrevTab) + "  siguiente / anterior",
 			"1-9  ir a la pestaña",
-			"r  renombrar pestaña",
-			"x  cerrar panel o pestaña",
-			"|  dividir a la derecha",
-			"-  dividir hacia abajo",
-			"o  siguiente panel",
-			"h j k l  panel en esa dirección",
-			"z  zoom del panel",
-			"!  panel a pestaña nueva",
-			"=  paneles del mismo tamaño",
-			"{ }  mover el panel",
+			k(input.ActionRenameTab) + "  renombrar pestaña",
+			k(input.ActionCloseTab) + "  cerrar panel o pestaña",
+			k(input.ActionSplitRight) + "  dividir a la derecha",
+			k(input.ActionSplitDown) + "  dividir hacia abajo",
+			k(input.ActionNextPane) + "  siguiente panel",
+			k(input.ActionFocusLeft) + " " + k(input.ActionFocusDown) + " " + k(input.ActionFocusUp) + " " + k(input.ActionFocusRight) + "  panel en esa dirección",
+			k(input.ActionZoomPane) + "  zoom del panel",
+			k(input.ActionBreakPane) + "  panel a pestaña nueva",
+			k(input.ActionEqualizePanes) + "  paneles del mismo tamaño",
+			k(input.ActionSwapPanePrev) + " " + k(input.ActionSwapPaneNext) + "  mover el panel",
 			"flechas  cambiar tamaño",
 			"(se repiten sin prefijo;",
 			"Esc termina, o arrastra",
 			"el borde con el mouse)",
-			"/  buscar en el historial",
+			k(input.ActionSearch) + "  buscar en el historial",
 			pfx + "  enviarlo al shell",
 			"",
 			st.label.Render("Historial"),
 			"",
 			"Shift+PgUp / Shift+PgDn",
 			"o la rueda del mouse.",
-			"Prefijo + / busca texto;",
+			"Prefijo + " + k(input.ActionSearch) + " busca texto;",
 			"↑/↓ salta entre resultados.",
 			"",
 			st.label.Render("Copiar"),

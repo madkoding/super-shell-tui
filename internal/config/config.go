@@ -13,6 +13,8 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/madkoding/super-shell-tui/internal/input"
 )
 
 // Config holds every user-tunable setting. Absent keys keep their default.
@@ -34,6 +36,9 @@ type Config struct {
 	RestoreCommand string `toml:"restore_command"`
 	// Colors are hex values ("#9D7CFF"); empty keeps the adaptive defaults.
 	Colors Colors `toml:"colors"`
+	// Keys rebinds commands typed after the prefix: action name to key,
+	// e.g. split_right = "v". See input.ActionNames.
+	Keys map[string]string `toml:"keys"`
 }
 
 // Colors customizes the theme.
@@ -111,12 +116,20 @@ func (c Config) Validate() error {
 	default:
 		return fmt.Errorf("restore_command must be \"off\", \"type\" or \"run\", got %q", c.RestoreCommand)
 	}
+	if _, err := c.Bindings(); err != nil {
+		return err
+	}
 	for name, v := range map[string]string{"colors.accent": c.Colors.Accent, "colors.muted": c.Colors.Muted} {
 		if v != "" && !hexColor.MatchString(v) {
 			return fmt.Errorf("%s must be a hex color like #9D7CFF, got %q", name, v)
 		}
 	}
 	return nil
+}
+
+// Bindings returns the keys after the prefix with Keys applied.
+func (c Config) Bindings() (input.Bindings, error) {
+	return input.DefaultBindings().With(c.Keys)
 }
 
 // ParsePrefix turns "ctrl+a".."ctrl+z", "ctrl+\", "ctrl+]", "ctrl+^" or
@@ -165,6 +178,16 @@ restore_command = "type"
 # Hex colors; leave empty for the defaults that adapt to light/dark terminals.
 accent = ""
 muted = ""
+
+[keys]
+# Rebind a command typed after the prefix to another key (one printable
+# character; digits and H/J/K/L are reserved). The new key replaces the
+# old ones. Actions: quit, toggle_sidebar, help, new_tab, next_tab,
+# prev_tab, rename_tab, close, search, split_right, split_down, next_pane,
+# zoom, break_pane, equalize, swap_next, swap_prev, focus_left, focus_down, focus_up,
+# focus_right.
+# split_right = "v"
+# split_down = "b"
 `
 
 // WriteSample creates path with Sample, refusing to overwrite a file.

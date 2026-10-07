@@ -57,6 +57,7 @@ super-shell -config otra.toml     # usa otro archivo
 | `restore_command` | `type`    | Programa que corría cada pestaña al salir: `type` lo deja escrito, `run` lo ejecuta, `off` lo ignora |
 | `colors.accent` | adaptativo  | Color principal en hex (`#9D7CFF`)               |
 | `colors.muted`  | adaptativo  | Color secundario en hex                          |
+| `keys.<acción>` | —         | Otra tecla para un comando, p. ej. `split_right = "v"` (ver abajo) |
 
 Un valor inválido o una clave desconocida detienen el arranque con un error
 que indica el archivo y la clave.
@@ -84,6 +85,20 @@ que indica el archivo y la clave.
 | `Ctrl+] z`   | Zoom: el panel activo ocupa toda el área (otra vez para volver) |
 | `Ctrl+] /`   | Buscar en el historial       |
 | `Ctrl+] Ctrl+]` | Enviar `Ctrl+]` al shell  |
+
+Las teclas después del prefijo se cambian en la sección `[keys]` del config:
+
+```toml
+[keys]
+split_right = "v"   # Ctrl+] v divide a la derecha (reemplaza | y %)
+split_down = "b"
+```
+
+Acciones: `quit`, `toggle_sidebar`, `help`, `new_tab`, `next_tab`,
+`prev_tab`, `rename_tab`, `close`, `search`, `split_right`, `split_down`,
+`next_pane`, `zoom`, `break_pane`, `equalize`, `swap_next`, `swap_prev`, `focus_left`,
+`focus_down`, `focus_up`, `focus_right`. Los dígitos y `H` `J` `K` `L` están
+reservados; la ayuda (`?`) muestra las teclas configuradas.
 
 Cualquier otra tecla va directo al shell.
 
