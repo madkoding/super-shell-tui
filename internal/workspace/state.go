@@ -10,9 +10,9 @@ import (
 	"github.com/madkoding/super-shell-tui/internal/shell"
 )
 
-// State is what is saved between runs: each tab's name and panes (layout,
-// directory and running program of each), and the active tab. History and
-// zoom are not restored.
+// State is what is saved between runs: each tab's name, zoom and panes
+// (layout, directory and running program of each), and the active tab.
+// History is not restored.
 type State struct {
 	Tabs   []SavedTab `json:"tabs"`
 	Active int        `json:"active"`
@@ -26,6 +26,8 @@ type SavedTab struct {
 	// Panes is the split layout; nil for a tab with a single pane. Dir and
 	// Cmd then describe the focused pane, for files without Panes.
 	Panes *SavedPane `json:"panes,omitempty"`
+	// Zoomed shows the focused pane alone, as with prefix + z.
+	Zoomed bool `json:"zoomed,omitempty"`
 }
 
 // SavedPane is a pane (Dir, Cmd, Focus) or a split of A and B.
@@ -66,9 +68,10 @@ func (w *Workspace) Snapshot() State {
 	st := State{Active: w.active}
 	for _, t := range w.tabs {
 		saved := SavedTab{
-			Dir:  t.focus.Cwd(),
-			Name: t.name,
-			Cmd:  t.focus.ForegroundCommand(),
+			Dir:    t.focus.Cwd(),
+			Name:   t.name,
+			Cmd:    t.focus.ForegroundCommand(),
+			Zoomed: t.zoomed,
 		}
 		if t.root.sess == nil {
 			saved.Panes = save(t.root, t.focus)

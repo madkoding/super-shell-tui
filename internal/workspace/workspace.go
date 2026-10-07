@@ -94,7 +94,7 @@ func Restore(st State, replay Replay, shellPath string, scrollback, width, heigh
 		if layout == nil || !layout.isSplit() || layout.count() > maxSavedPanes {
 			layout = &SavedPane{Dir: t.Dir, Cmd: t.Cmd, Focus: true}
 		}
-		if err := w.restoreTab(layout, t.Name, replay); err != nil {
+		if err := w.restoreTab(layout, t.Name, t.Zoomed, replay); err != nil {
 			w.Close()
 			return nil, err
 		}
@@ -104,8 +104,8 @@ func Restore(st State, replay Replay, shellPath string, scrollback, width, heigh
 }
 
 // restoreTab opens a tab with the saved layout, one shell per pane, and
-// replays each pane's program per replay.
-func (w *Workspace) restoreTab(layout *SavedPane, name string, replay Replay) error {
+// replays each pane's program per replay. zoomed only applies to splits.
+func (w *Workspace) restoreTab(layout *SavedPane, name string, zoomed bool, replay Replay) error {
 	cols, rows := Pane{W: w.width, H: w.height}.Inner() // fixed by relayout
 	var started []*shell.Session
 	var focus *shell.Session
@@ -152,7 +152,7 @@ func (w *Workspace) restoreTab(layout *SavedPane, name string, replay Replay) er
 		return err
 	}
 
-	t := &tab{root: root, focus: focus, name: name}
+	t := &tab{root: root, focus: focus, name: name, zoomed: zoomed && root.sess == nil}
 	w.mu.Lock()
 	w.tabs = append(w.tabs, t)
 	w.active = len(w.tabs) - 1
