@@ -142,6 +142,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.split(input.Action(msg) == input.ActionSplitRight)
 		case input.ActionNextPane:
 			m.changeFocus(m.ws.FocusNext)
+		case input.ActionFocusLeft:
+			m.changeFocus(func() { m.ws.FocusPane(workspace.Left) })
+		case input.ActionFocusRight:
+			m.changeFocus(func() { m.ws.FocusPane(workspace.Right) })
+		case input.ActionFocusUp:
+			m.changeFocus(func() { m.ws.FocusPane(workspace.Up) })
+		case input.ActionFocusDown:
+			m.changeFocus(func() { m.ws.FocusPane(workspace.Down) })
 		case input.ActionResizeLeft:
 			m.ws.ResizePane(workspace.Left)
 		case input.ActionResizeRight:
@@ -267,7 +275,7 @@ func (m *Model) View() string {
 	} else if m.resizeMode {
 		status = bar(st.armed, "Tamaño: flechas o H/J/K/L mueven el borde · Enter/Esc o cualquier otra tecla terminan")
 	} else if m.prefixArmed {
-		status = bar(st.armed, fmt.Sprintf("%[1]s … ?  ayuda · c  nueva · x  cerrar · n/p  cambiar · 1-9  ir · r  renombrar · /  buscar · |/-  dividir · o  panel · z  zoom · flechas  tamaño · s  panel · q  salir · %[1]s  enviar %[1]s", pfx))
+		status = bar(st.armed, fmt.Sprintf("%[1]s … ?  ayuda · c  nueva · x  cerrar · n/p  cambiar · 1-9  ir · r  renombrar · /  buscar · |/-  dividir · o/hjkl  panel · z  zoom · flechas  tamaño · s  panel · q  salir · %[1]s  enviar %[1]s", pfx))
 	} else if off, history := m.sess.ScrollOffset(); off > 0 {
 		status = bar(st.scroll, fmt.Sprintf("Historial: %d/%d líneas arriba · Shift+PgDn bajar · cualquier tecla vuelve", off, history))
 	}
@@ -292,6 +300,7 @@ func (m *Model) sidebar() string {
 			"|  dividir a la derecha",
 			"-  dividir hacia abajo",
 			"o  siguiente panel",
+			"h j k l  panel en esa dirección",
 			"z  zoom del panel",
 			"flechas  cambiar tamaño",
 			"(se repiten sin prefijo;",

@@ -285,3 +285,48 @@ func (w *Workspace) Focus(s *shell.Session) {
 	w.mu.Unlock()
 	w.notify()
 }
+
+// FocusPane moves the focus to the pane next to the focused one towards
+// dir: the one sharing the longest border with it, the topmost or leftmost
+// on a tie. Nothing changes when there is no pane that way.
+func (w *Workspace) FocusPane(dir Direction) {
+	w.mu.Lock()
+	if len(w.tabs) == 0 {
+		w.mu.Unlock()
+		return
+	}
+	t := w.tabs[w.active]
+	zoomed := t.zoomed
+	unzoom(t)
+	ps := w.panes(t)
+	var cur Pane
+	for _, p := range ps {
+		if p.Active {
+			cur = p
+		}
+	}
+	best, bestShared := (*Pane)(nil), 0
+	for i, p := range ps {
+		var touches bool
+		var shared int
+		switch dir {
+		case Left, Right:
+			touches = dir == Left && p.X+p.W == cur.X || dir == Right && cur.X+cur.W == p.X
+			shared = min(p.Y+p.H, cur.Y+cur.H) - max(p.Y, cur.Y)
+		default:
+			touches = dir == Up && p.Y+p.H == cur.Y || dir == Down && cur.Y+cur.H == p.Y
+			shared = min(p.X+p.W, cur.X+cur.W) - max(p.X, cur.X)
+		}
+		if touches && shared > bestShared {
+			best, bestShared = &ps[i], shared
+		}
+	}
+	if best != nil {
+		t.focus = best.Sess
+	}
+	w.mu.Unlock()
+	if zoomed {
+		w.relayout(t)
+	}
+	w.notify()
+}
