@@ -61,7 +61,12 @@ func run() error {
 	if cfg.RestoreTabs {
 		saved = workspace.LoadState(statePath)
 	}
-	ws, err := workspace.Restore(saved, shellPath, cfg.Scrollback, cols, rows)
+	replay := map[string]workspace.Replay{
+		"off":  workspace.ReplayOff,
+		"type": workspace.ReplayType,
+		"run":  workspace.ReplayRun,
+	}[cfg.RestoreCommand] // validated by Load
+	ws, err := workspace.Restore(saved, replay, shellPath, cfg.Scrollback, cols, rows)
 	if err != nil {
 		return fmt.Errorf("start shell: %w", err)
 	}

@@ -62,7 +62,7 @@ func TestLoad(t *testing.T) {
 	if cfg.Prefix != "ctrl+a" || cfg.Sidebar || cfg.SidebarWidth != 30 || cfg.Colors.Accent != "#ff8800" {
 		t.Fatalf("partial file: %+v", cfg)
 	}
-	for _, bad := range []string{"sidebar_width = 5", "scrollback = -1", "prefix = \"ctrl+[\"", "[colors]\naccent = \"red\"", "typo = 1"} {
+	for _, bad := range []string{"sidebar_width = 5", "scrollback = -1", "prefix = \"ctrl+[\"", "[colors]\naccent = \"red\"", "typo = 1", "restore_command = \"yes\""} {
 		if err := write(bad); err == nil || !strings.Contains(err.Error(), path) {
 			t.Errorf("%q: want error naming the file, got %v", bad, err)
 		}
