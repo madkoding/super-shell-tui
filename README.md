@@ -72,7 +72,8 @@ Cualquier otra tecla va directo al shell.
 
 ## Pestañas
 
-- Hasta 9 shells abiertos; la cabecera muestra `[activa]` y marca con `•` las
+- Hasta 9 shells abiertos; click en una pestaña de la cabecera para cambiar.
+- La cabecera muestra `[activa]` y marca con `•` las
   pestañas en segundo plano que tuvieron salida nueva.
 - Al salir de un shell (`exit`, Ctrl+D) se cierra su pestaña; al cerrar la
   última termina la aplicación.

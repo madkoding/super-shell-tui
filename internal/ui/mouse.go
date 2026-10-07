@@ -31,6 +31,14 @@ func (m *Model) handleMouse(ev input.MouseEvent) tea.Cmd {
 	x, y := ev.X-ox, ev.Y-oy
 	inside := x >= 0 && y >= 0 && x < cols && y < rows
 
+	// A left click on the header switches tabs.
+	if ev.Y == 0 && ev.Button() == 0 && !ev.Motion() && !ev.Release && ev.Wheel() == 0 {
+		if i := m.tabAt(ev.X); i >= 0 {
+			m.switchTab(func() { m.ws.Select(i) })
+		}
+		return nil
+	}
+
 	if m.sess.WantsMouse() && !m.selecting {
 		if inside {
 			m.sess.ForwardMouse(ev.Code, x, y, ev.Release)

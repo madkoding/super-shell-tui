@@ -231,9 +231,20 @@ func (m *Model) switchTab(change func()) {
 // tabBar renders the header: the app name followed by one label per tab.
 // Background tabs with new output are marked with a dot.
 func (m *Model) tabBar() string {
-	st := m.styles
-	parts := []string{"Super Shell"}
-	for i, t := range m.ws.Tabs() {
+	text, _ := tabLayout(m.ws.Tabs())
+	return m.styles.header.Width(m.width).MaxWidth(m.width).Render(text)
+}
+
+// headerPad is the header's left padding, where tab labels start counting.
+const headerPad = 1
+
+// tabLayout builds the header text and the screen column range [from, to)
+// of each tab label, used to switch tabs with a click.
+func tabLayout(tabs []workspace.Tab) (string, [][2]int) {
+	var b strings.Builder
+	b.WriteString("Super Shell")
+	spans := make([][2]int, len(tabs))
+	for i, t := range tabs {
 		label := fmt.Sprintf("%d:%s", i+1, t.Title)
 		switch {
 		case t.Active:
@@ -243,9 +254,23 @@ func (m *Model) tabBar() string {
 		default:
 			label = " " + label + " "
 		}
-		parts = append(parts, label)
+		b.WriteString(" ")
+		from := headerPad + lipgloss.Width(b.String())
+		b.WriteString(label)
+		spans[i] = [2]int{from, from + lipgloss.Width(label)}
 	}
-	return st.header.Width(m.width).MaxWidth(m.width).Render(strings.Join(parts, " "))
+	return b.String(), spans
+}
+
+// tabAt returns the tab under header column x, or -1.
+func (m *Model) tabAt(x int) int {
+	_, spans := tabLayout(m.ws.Tabs())
+	for i, sp := range spans {
+		if x >= sp[0] && x < sp[1] {
+			return i
+		}
+	}
+	return -1
 }
 
 // truncLeft keeps the tail of s so long paths show their last segments.
