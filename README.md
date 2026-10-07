@@ -56,6 +56,7 @@ que indica el archivo y la clave.
 | `Ctrl+] \|` / `Ctrl+] %` | Dividir el panel a la derecha |
 | `Ctrl+] -` / `Ctrl+] "` | Dividir el panel hacia abajo |
 | `Ctrl+] o`   | Siguiente panel              |
+| `Ctrl+] z`   | Zoom: el panel activo ocupa toda el área (otra vez para volver) |
 | `Ctrl+] /`   | Buscar en el historial       |
 | `Ctrl+] Ctrl+]` | Enviar `Ctrl+]` al shell  |
 
@@ -85,6 +86,9 @@ Cualquier otra tecla va directo al shell.
 - El panel activo tiene el borde de color; cambia con `Ctrl+] o` o con un
   click. La rueda del mouse desplaza el panel que está bajo el puntero.
 - Al salir de un shell su panel desaparece y el vecino ocupa su lugar.
+- `Ctrl+] z` agranda el panel activo a toda el área; la pestaña muestra
+  `(zoom)`. Se vuelve al layout con `Ctrl+] z`, al cambiar de panel o al
+  dividir.
 - Las divisiones no se guardan entre sesiones: cada pestaña se restaura con
   el directorio de su panel activo.
 

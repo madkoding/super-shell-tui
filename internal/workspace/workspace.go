@@ -25,6 +25,7 @@ type Tab struct {
 	Name     string // user-given name, empty when automatic
 	Active   bool
 	Activity bool // output arrived while in the background
+	Zoomed   bool // showing one pane of several
 }
 
 type tab struct {
@@ -32,6 +33,7 @@ type tab struct {
 	focus    *shell.Session // the pane receiving keystrokes
 	name     string         // set by the user; empty means automatic
 	activity bool
+	zoomed   bool // only the focused pane is shown
 }
 
 // Workspace is safe for concurrent use: the input pump writes to it while
@@ -184,6 +186,7 @@ func (w *Workspace) watch(t *tab, sess *shell.Session) {
 				t.root = remove(t.root, leaf)
 			}
 			remaining := t.root != nil
+			unzoom(t)
 			if remaining && t.focus == sess {
 				t.focus = t.root.first().sess
 			}
@@ -302,7 +305,7 @@ func (w *Workspace) Tabs() []Tab {
 		if name == "" {
 			name = title(t.focus, i)
 		}
-		out[i] = Tab{Title: name, Name: t.name, Active: i == w.active, Activity: t.activity}
+		out[i] = Tab{Title: name, Name: t.name, Active: i == w.active, Activity: t.activity, Zoomed: t.zoomed}
 	}
 	return out
 }
@@ -348,15 +351,15 @@ func (w *Workspace) query(f func(*shell.Session) bool) bool {
 	return false
 }
 
-// Close terminates every shell.
+// Close terminates every shell, hidden panes included.
 func (w *Workspace) Close() {
 	w.mu.Lock()
-	var all []Pane
+	var all []*shell.Session
 	for _, t := range w.tabs {
-		all = append(all, w.panes(t)...)
+		all = t.root.leaves(all)
 	}
 	w.mu.Unlock()
-	for _, p := range all {
-		_ = p.Sess.Close()
+	for _, s := range all {
+		_ = s.Close()
 	}
 }

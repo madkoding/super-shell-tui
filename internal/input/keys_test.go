@@ -143,9 +143,9 @@ func TestFeedMouse(t *testing.T) {
 
 func TestFeedTabCommands(t *testing.T) {
 	tr := NewTranslator(0, nil)
-	_, acts := tr.Feed([]byte{DefaultPrefix, 'c', DefaultPrefix, 'n', DefaultPrefix, 'p', DefaultPrefix, '3', DefaultPrefix, 'x', DefaultPrefix, '/', DefaultPrefix, '|', DefaultPrefix, '-', DefaultPrefix, 'o'})
+	_, acts := tr.Feed([]byte{DefaultPrefix, 'c', DefaultPrefix, 'n', DefaultPrefix, 'p', DefaultPrefix, '3', DefaultPrefix, 'x', DefaultPrefix, '/', DefaultPrefix, '|', DefaultPrefix, '-', DefaultPrefix, 'o', DefaultPrefix, 'z'})
 	got := commands(acts)
-	want := []Action{ActionNewTab, ActionNextTab, ActionPrevTab, ActionSelectTab + 2, ActionCloseTab, ActionSearch, ActionSplitRight, ActionSplitDown, ActionNextPane}
+	want := []Action{ActionNewTab, ActionNextTab, ActionPrevTab, ActionSelectTab + 2, ActionCloseTab, ActionSearch, ActionSplitRight, ActionSplitDown, ActionNextPane, ActionZoomPane}
 	if !slices.Equal(got, want) || got[3].SelectedTab() != 2 || ActionQuit.SelectedTab() != -1 {
 		t.Fatalf("got %v", got)
 	}

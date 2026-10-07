@@ -137,6 +137,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.split(input.Action(msg) == input.ActionSplitRight)
 		case input.ActionNextPane:
 			m.changeFocus(m.ws.FocusNext)
+		case input.ActionZoomPane:
+			if m.ws.PaneCount() < 2 {
+				return m, m.setFlash("El zoom necesita al menos dos paneles (" + m.opts.PrefixLabel + " | para dividir)")
+			}
+			m.ws.ToggleZoom()
 		default:
 			if i := input.Action(msg).SelectedTab(); i >= 0 {
 				m.switchTab(func() { m.ws.Select(i) })
@@ -247,7 +252,7 @@ func (m *Model) View() string {
 	} else if m.flash != "" {
 		status = bar(st.scroll, m.flash)
 	} else if m.prefixArmed {
-		status = bar(st.armed, fmt.Sprintf("%[1]s … ?  ayuda · c  nueva · x  cerrar · n/p  cambiar · 1-9  ir · r  renombrar · /  buscar · |/-  dividir · o  panel · s  panel · q  salir · %[1]s  enviar %[1]s", pfx))
+		status = bar(st.armed, fmt.Sprintf("%[1]s … ?  ayuda · c  nueva · x  cerrar · n/p  cambiar · 1-9  ir · r  renombrar · /  buscar · |/-  dividir · o  panel · z  zoom · s  panel · q  salir · %[1]s  enviar %[1]s", pfx))
 	} else if off, history := m.sess.ScrollOffset(); off > 0 {
 		status = bar(st.scroll, fmt.Sprintf("Historial: %d/%d líneas arriba · Shift+PgDn bajar · cualquier tecla vuelve", off, history))
 	}
@@ -272,6 +277,7 @@ func (m *Model) sidebar() string {
 			"|  dividir a la derecha",
 			"-  dividir hacia abajo",
 			"o  siguiente panel",
+			"z  zoom del panel",
 			"/  buscar en el historial",
 			pfx + "  enviarlo al shell",
 			"",
@@ -368,6 +374,9 @@ func tabLayout(tabs []workspace.Tab) (string, [][2]int) {
 	spans := make([][2]int, len(tabs))
 	for i, t := range tabs {
 		label := fmt.Sprintf("%d:%s", i+1, t.Title)
+		if t.Zoomed {
+			label += " (zoom)"
+		}
 		switch {
 		case t.Active:
 			label = "[" + label + "]"

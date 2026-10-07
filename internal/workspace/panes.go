@@ -69,6 +69,14 @@ func (n *node) find(s *shell.Session) *node {
 	return n.b.find(s)
 }
 
+// leaves returns the shells of n in layout order.
+func (n *node) leaves(out []*shell.Session) []*shell.Session {
+	if n.sess != nil {
+		return append(out, n.sess)
+	}
+	return n.b.leaves(n.a.leaves(out))
+}
+
 // first returns the top-left leaf.
 func (n *node) first() *node {
 	for n.sess == nil {
@@ -100,8 +108,12 @@ func remove(root, leaf *node) *node {
 	return root
 }
 
-// panes lays out tab t in the current area. Caller holds w.mu.
+// panes lays out tab t in the current area; a zoomed tab shows only its
+// focused pane. Caller holds w.mu.
 func (w *Workspace) panes(t *tab) []Pane {
+	if t.zoomed {
+		return []Pane{{Sess: t.focus, W: w.width, H: w.height, Active: true}}
+	}
 	ps := layout(t.root, 0, 0, w.width, w.height, nil)
 	for i := range ps {
 		ps[i].Active = ps[i].Sess == t.focus
@@ -119,8 +131,34 @@ func (w *Workspace) Panes() []Pane {
 	return w.panes(w.tabs[w.active])
 }
 
-// PaneCount returns how many panes the active tab has.
-func (w *Workspace) PaneCount() int { return len(w.Panes()) }
+// PaneCount returns how many panes the active tab has, hidden ones included.
+func (w *Workspace) PaneCount() int {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if len(w.tabs) == 0 {
+		return 0
+	}
+	return len(w.tabs[w.active].root.leaves(nil))
+}
+
+// ToggleZoom shows the focused pane over the whole area, or restores the
+// layout. A tab with a single pane is never zoomed.
+func (w *Workspace) ToggleZoom() {
+	w.mu.Lock()
+	if len(w.tabs) == 0 {
+		w.mu.Unlock()
+		return
+	}
+	t := w.tabs[w.active]
+	t.zoomed = !t.zoomed && t.root.sess == nil
+	w.mu.Unlock()
+	w.relayout(t)
+	w.notify()
+}
+
+// unzoom restores the layout of t before a change that needs it. Caller
+// holds w.mu and must relayout t afterwards.
+func unzoom(t *tab) { t.zoomed = false }
 
 // relayout resizes every shell of t to its pane. Caller must not hold w.mu.
 func (w *Workspace) relayout(t *tab) {
@@ -141,6 +179,7 @@ func (w *Workspace) Split(vertical bool) error {
 		return nil
 	}
 	t := w.tabs[w.active]
+	unzoom(t)
 	var cur Pane
 	for _, p := range w.panes(t) {
 		if p.Active {
@@ -195,6 +234,8 @@ func (w *Workspace) FocusNext() {
 		return
 	}
 	t := w.tabs[w.active]
+	zoomed := t.zoomed
+	unzoom(t)
 	ps := w.panes(t)
 	for i, p := range ps {
 		if p.Active {
@@ -203,6 +244,9 @@ func (w *Workspace) FocusNext() {
 		}
 	}
 	w.mu.Unlock()
+	if zoomed {
+		w.relayout(t)
+	}
 	w.notify()
 }
 

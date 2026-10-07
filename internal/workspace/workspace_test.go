@@ -132,7 +132,17 @@ func TestSplitPanes(t *testing.T) {
 		t.Errorf("shell size %dx%d, want 18x3", c, r)
 	}
 
+	// Zoom shows the focused pane alone, at full size, until focus moves.
+	w.ToggleZoom()
+	if ps := w.Panes(); len(ps) != 1 || ps[0].W != 40 || !w.Tabs()[0].Zoomed || w.PaneCount() != 3 {
+		t.Fatalf("zoomed panes %+v", ps)
+	}
+	waitFor(t, func() bool { c, r := w.Active().Size(); return c == 38 && r == 8 })
+
 	w.FocusNext()
+	if w.Tabs()[0].Zoomed || len(w.Panes()) != 3 {
+		t.Fatal("moving the focus should end the zoom")
+	}
 	if w.Active() != first {
 		t.Fatal("FocusNext should wrap to the first pane")
 	}
