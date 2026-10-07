@@ -18,12 +18,33 @@ const (
 var ErrNoRoom = errors.New("not enough room to split")
 
 // node is a pane (sess set) or a split of a and b. A vertical split puts a
-// left of b; otherwise a is above b.
+// left of b; otherwise a is above b. ratio is a's share (0 means half).
 type node struct {
 	sess     *shell.Session
 	vertical bool
+	ratio    float64
 	a, b     *node
 	parent   *node
+}
+
+// splitAt returns the size of a's side out of total cells, keeping both
+// sides at least minSide when there is room for it.
+func (n *node) splitAt(total, minSide int) int {
+	ratio := n.ratio
+	if ratio == 0 {
+		ratio = 0.5
+	}
+	a := int(float64(total) * ratio)
+	if minSide <= total-minSide {
+		a = max(minSide, min(a, total-minSide))
+	}
+	return a
+}
+
+// setSplit stores a share of a cells out of total; the half cell keeps
+// splitAt from rounding it down.
+func (n *node) setSplit(a, total int) {
+	n.ratio = (float64(a) + 0.5) / float64(total)
 }
 
 // Pane is a shell's box in the pane area, borders included. X and Y are
@@ -43,11 +64,11 @@ func layout(n *node, x, y, w, h int, out []Pane) []Pane {
 		return append(out, Pane{Sess: n.sess, X: x, Y: y, W: w, H: h})
 	}
 	if n.vertical {
-		wa := w / 2
+		wa := n.splitAt(w, minPaneCols+2)
 		out = layout(n.a, x, y, wa, h, out)
 		return layout(n.b, x+wa, y, w-wa, h, out)
 	}
-	ha := h / 2
+	ha := n.splitAt(h, minPaneRows+2)
 	out = layout(n.a, x, y, w, ha, out)
 	return layout(n.b, x, y+ha, w, h-ha, out)
 }

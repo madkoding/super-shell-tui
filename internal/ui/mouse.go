@@ -41,8 +41,26 @@ func (m *Model) handleMouse(ev input.MouseEvent) tea.Cmd {
 		return nil
 	}
 
-	p, x, y, inside := m.paneAt(ev.X, ev.Y)
+	// Dragging a border between panes resizes them.
+	ox, oy := m.areaOrigin()
+	if m.dragging != nil {
+		switch {
+		case ev.Release:
+			m.dragging = nil
+		case ev.Motion():
+			m.ws.MoveDivider(*m.dragging, ev.X-ox, ev.Y-oy)
+		}
+		return nil
+	}
 	press := ev.Wheel() == 0 && !ev.Motion() && !ev.Release
+	if press && ev.Button() == 0 && !m.selecting {
+		if d, ok := m.ws.DividerAt(ev.X-ox, ev.Y-oy); ok {
+			m.dragging = &d
+			return nil
+		}
+	}
+
+	p, x, y, inside := m.paneAt(ev.X, ev.Y)
 	if press && p.Sess != nil && !p.Active && !m.selecting {
 		m.changeFocus(func() { m.ws.Focus(p.Sess) })
 	}
@@ -55,7 +73,6 @@ func (m *Model) handleMouse(ev input.MouseEvent) tea.Cmd {
 	}
 	if p.Sess != m.sess {
 		// Drags leaving the focused pane keep selecting in it, clamped.
-		ox, oy := m.areaOrigin()
 		for _, q := range m.ws.Panes() {
 			if q.Active {
 				x, y = ev.X-ox-q.X-1, ev.Y-oy-q.Y-1

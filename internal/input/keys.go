@@ -34,6 +34,10 @@ const (
 	ActionSplitDown  // new pane below
 	ActionNextPane
 	ActionZoomPane
+	ActionResizeLeft // prefix + arrow (or H/J/K/L): move a pane divider
+	ActionResizeRight
+	ActionResizeUp
+	ActionResizeDown
 )
 
 // ActionSelectTab is the first of nine actions selecting tabs 1..9
@@ -129,6 +133,11 @@ func (t *Translator) Feed(chunk []byte) (out []byte, actions []Action) {
 		if t.armed {
 			t.armed = false
 			actions = append(actions, ActionPrefixDone)
+			if c == 0x1b && isArrow(chunk[i:]) {
+				actions = append(actions, arrowResize[chunk[i+2]])
+				i += 2
+				continue
+			}
 			switch c {
 			case 'q', 'Q':
 				actions = append(actions, ActionQuit)
@@ -156,6 +165,14 @@ func (t *Translator) Feed(chunk []byte) (out []byte, actions []Action) {
 				actions = append(actions, ActionNextPane)
 			case 'z':
 				actions = append(actions, ActionZoomPane)
+			case 'H':
+				actions = append(actions, ActionResizeLeft)
+			case 'L':
+				actions = append(actions, ActionResizeRight)
+			case 'K':
+				actions = append(actions, ActionResizeUp)
+			case 'J':
+				actions = append(actions, ActionResizeDown)
 			case '1', '2', '3', '4', '5', '6', '7', '8', '9':
 				actions = append(actions, ActionSelectTab+Action(c-'1'))
 			case t.Prefix:
@@ -206,6 +223,16 @@ func (t *Translator) InPaste() bool { return t.inPaste }
 
 // Armed reports whether the prefix key is waiting for a command.
 func (t *Translator) Armed() bool { return t.armed }
+
+// arrowResize maps the final byte of an arrow key to its resize action.
+var arrowResize = map[byte]Action{
+	'A': ActionResizeUp, 'B': ActionResizeDown, 'C': ActionResizeRight, 'D': ActionResizeLeft,
+}
+
+// isArrow matches an arrow key in CSI (ESC [ A) or SS3 (ESC O A) form.
+func isArrow(b []byte) bool {
+	return len(b) >= 3 && b[0] == 0x1b && (b[1] == '[' || b[1] == 'O') && arrowResize[b[2]] != 0
+}
 
 // isCSIArrow matches ESC [ {A,B,C,D,H,F}, which DECCKM turns into SS3.
 func isCSIArrow(b []byte) bool {

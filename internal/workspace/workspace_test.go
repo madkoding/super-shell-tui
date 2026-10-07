@@ -154,3 +154,88 @@ func TestSplitPanes(t *testing.T) {
 	}
 	waitFor(t, func() bool { c, _ := w.Active().Size(); return c == 38 })
 }
+
+func TestResizePanes(t *testing.T) {
+	w, err := New("/bin/sh", 100, 40, 10)
+	if err != nil {
+		t.Skip("no /bin/sh:", err)
+	}
+	defer w.Close()
+	if err := w.Split(true); err != nil {
+		t.Fatal(err)
+	}
+	widths := func() [2]int { ps := w.Panes(); return [2]int{ps[0].W, ps[1].W} }
+
+	w.ResizePane(Right) // one step is a tenth of the split
+	if got := widths(); got != [2]int{24, 16} {
+		t.Fatalf("after Right: %v", got)
+	}
+	w.ResizePane(Up) // no horizontal divider: nothing moves
+	if got := widths(); got != [2]int{24, 16} {
+		t.Fatalf("after Up: %v", got)
+	}
+	if _, ok := w.DividerAt(5, 5); ok {
+		t.Fatal("no divider inside a pane")
+	}
+	d, ok := w.DividerAt(23, 3)
+	if !ok {
+		t.Fatal("divider not found on the border")
+	}
+	w.MoveDivider(d, 35, 3) // clamped so the right pane keeps 10 columns
+	if got := widths(); got != [2]int{28, 12} {
+		t.Fatalf("after drag: %v", got)
+	}
+	waitFor(t, func() bool { c, _ := w.Active().Size(); return c == 10 })
+}
+
+func TestRestorePanes(t *testing.T) {
+	w, err := New("/bin/sh", 100, 40, 10)
+	if err != nil {
+		t.Skip("no /bin/sh:", err)
+	}
+	defer w.Close()
+	if err := w.Split(true); err != nil {
+		t.Fatal(err)
+	}
+	w.ResizePane(Right)
+	if err := w.Split(false); err != nil {
+		t.Fatal(err)
+	}
+	w.FocusNext() // focus the left pane
+	rects := func(w *Workspace) (out [][5]int) {
+		for _, p := range w.Panes() {
+			active := 0
+			if p.Active {
+				active = 1
+			}
+			out = append(out, [5]int{p.X, p.Y, p.W, p.H, active})
+		}
+		return out
+	}
+	want := rects(w)
+
+	// Through JSON, as on disk.
+	path := filepath.Join(t.TempDir(), "tabs.json")
+	if err := SaveState(path, w.Snapshot()); err != nil {
+		t.Fatal(err)
+	}
+	r, err := Restore(LoadState(path), ReplayOff, "/bin/sh", 100, 40, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	if got := rects(r); !reflect.DeepEqual(got, want) {
+		t.Fatalf("restored %v, want %v", got, want)
+	}
+
+	// A damaged layout falls back to one pane.
+	st := State{Tabs: []SavedTab{{Dir: "/", Panes: &SavedPane{A: &SavedPane{}}}}}
+	r2, err := Restore(st, ReplayOff, "/bin/sh", 100, 40, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r2.Close()
+	if r2.PaneCount() != 1 {
+		t.Fatalf("damaged layout gave %d panes", r2.PaneCount())
+	}
+}

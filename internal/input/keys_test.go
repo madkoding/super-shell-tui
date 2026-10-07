@@ -168,3 +168,13 @@ func TestFeedCapture(t *testing.T) {
 		t.Fatalf("got %q", out)
 	}
 }
+
+func TestFeedResizeKeys(t *testing.T) {
+	tr := NewTranslator(0, nil)
+	in := []byte{DefaultPrefix, 0x1b, '[', 'D', DefaultPrefix, 0x1b, 'O', 'A', DefaultPrefix, 'J', DefaultPrefix, 'L'}
+	out, acts := tr.Feed(in)
+	want := []Action{ActionResizeLeft, ActionResizeUp, ActionResizeDown, ActionResizeRight}
+	if len(out) != 0 || !slices.Equal(commands(acts), want) {
+		t.Fatalf("out %q actions %v", out, commands(acts))
+	}
+}
