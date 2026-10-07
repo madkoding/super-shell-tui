@@ -4,6 +4,7 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -53,6 +54,9 @@ type Model struct {
 	renaming      bool
 	renameBuf     []rune
 	confirmClose  bool // waiting for y/n before closing the active tab
+	searching     bool // typing a scrollback search
+	searchBuf     []rune
+	searchMiss    bool // the last search found nothing
 
 	// Clipboard copies text to the system clipboard (OSC 52 by default).
 	Clipboard func(string)
@@ -97,6 +101,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.handleRenameInput(msg)
 		case m.confirmClose:
 			m.handleCloseInput(msg)
+		case m.searching:
+			m.handleSearchInput(msg)
 		}
 	case MouseMsg:
 		return m, m.handleMouse(input.MouseEvent(msg))
@@ -125,6 +131,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.startRename()
 		case input.ActionCloseTab:
 			m.startClose()
+		case input.ActionSearch:
+			return m, m.startSearch()
+		case input.ActionSplitRight, input.ActionSplitDown:
+			return m, m.split(input.Action(msg) == input.ActionSplitRight)
+		case input.ActionNextPane:
+			m.changeFocus(m.ws.FocusNext)
 		default:
 			if i := input.Action(msg).SelectedTab(); i >= 0 {
 				m.switchTab(func() { m.ws.Select(i) })
@@ -143,28 +155,65 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// paneSize returns the inner size (cells) available to the shell.
-func (m *Model) paneSize() (cols, rows int) {
-	cols = m.width - 2 // pane border
+// areaSize returns the size of the pane area, pane borders included.
+func (m *Model) areaSize() (width, height int) {
+	width = m.width
 	if m.showSidebar {
-		cols -= m.opts.SidebarWidth + 2
+		width -= m.opts.SidebarWidth + 2
 	}
-	rows = m.height - 2 - 2 // header + status, pane border
-	return max(cols, 1), max(rows, 1)
+	return max(width, 3), max(m.height-2, 3) // header + status
+}
+
+// areaOrigin returns the screen cell of the pane area's top-left corner.
+func (m *Model) areaOrigin() (x, y int) {
+	if m.showSidebar {
+		x = m.opts.SidebarWidth + 2
+	}
+	return x, 1 // below the header
 }
 
 func (m *Model) resizeShell() {
 	if m.width == 0 || m.height == 0 {
 		return
 	}
-	m.ws.Resize(m.paneSize())
+	m.ws.Resize(m.areaSize())
+}
+
+// renderPanes draws the active tab's panes, each in its own box; the focused
+// one has the accent border and the cursor.
+func (m *Model) renderPanes() string {
+	width, height := m.areaSize()
+	panes := m.ws.Panes()
+	lines := make([][]string, len(panes))
+	for i, p := range panes {
+		style := m.styles.pane
+		if !p.Active && len(panes) > 1 {
+			style = m.styles.paneIdle
+		}
+		cols, rows := p.Inner()
+		box := style.Width(cols).Height(rows).Render(p.Sess.Render(p.Active))
+		lines[i] = strings.Split(box, "\n")
+	}
+	// The panes tile the area, so each screen row is the concatenation of
+	// the boxes crossing it, left to right (layout order already is).
+	out := make([]string, height)
+	for y := range out {
+		var b strings.Builder
+		for i, p := range panes {
+			if y >= p.Y && y < p.Y+p.H && y-p.Y < len(lines[i]) {
+				b.WriteString(lines[i][y-p.Y])
+			}
+		}
+		out[y] = b.String()
+	}
+	return lipgloss.NewStyle().MaxWidth(width).Render(strings.Join(out, "\n"))
 }
 
 func (m *Model) View() string {
 	if m.width == 0 || m.sess == nil {
 		return ""
 	}
-	cols, rows := m.paneSize()
+	_, height := m.areaSize()
 
 	st, pfx := m.styles, m.opts.PrefixLabel
 	bar := func(style lipgloss.Style, text string) string {
@@ -173,10 +222,10 @@ func (m *Model) View() string {
 
 	header := m.tabBar()
 
-	pane := st.pane.Width(cols).Height(rows).Render(m.sess.Render(true))
+	pane := m.renderPanes()
 	body := pane
 	if m.showSidebar {
-		side := st.sidebar.Width(m.opts.SidebarWidth).Height(rows).Render(m.sidebar())
+		side := st.sidebar.Width(m.opts.SidebarWidth).Height(height - 2).Render(m.sidebar())
 		body = lipgloss.JoinHorizontal(lipgloss.Top, side, pane)
 	}
 
@@ -184,11 +233,21 @@ func (m *Model) View() string {
 	if m.renaming {
 		status = bar(st.armed, "Nombre de la pestaña: "+string(m.renameBuf)+"█  · Enter guardar · Esc cancelar · vacío = automático")
 	} else if m.confirmClose {
-		status = bar(st.armed, fmt.Sprintf("¿Cerrar la pestaña %d y terminar su shell? y = sí · cualquier otra tecla = no", m.ws.ActiveIndex()+1))
+		what := fmt.Sprintf("la pestaña %d", m.ws.ActiveIndex()+1)
+		if m.ws.PaneCount() > 1 {
+			what = "este panel"
+		}
+		status = bar(st.armed, "¿Cerrar "+what+" y terminar su shell? y = sí · cualquier otra tecla = no")
+	} else if m.searching {
+		miss := ""
+		if m.searchMiss {
+			miss = "  (sin coincidencias)"
+		}
+		status = bar(st.armed, "Buscar: "+string(m.searchBuf)+"█"+miss+"  · ↑/↓ anterior/siguiente · Enter quedarse aquí · Esc cancelar")
 	} else if m.flash != "" {
 		status = bar(st.scroll, m.flash)
 	} else if m.prefixArmed {
-		status = bar(st.armed, fmt.Sprintf("%[1]s … ?  ayuda · c  nueva · x  cerrar · n/p  cambiar · 1-9  ir · r  renombrar · s  panel · q  salir · %[1]s  enviar %[1]s", pfx))
+		status = bar(st.armed, fmt.Sprintf("%[1]s … ?  ayuda · c  nueva · x  cerrar · n/p  cambiar · 1-9  ir · r  renombrar · /  buscar · |/-  dividir · o  panel · s  panel · q  salir · %[1]s  enviar %[1]s", pfx))
 	} else if off, history := m.sess.ScrollOffset(); off > 0 {
 		status = bar(st.scroll, fmt.Sprintf("Historial: %d/%d líneas arriba · Shift+PgDn bajar · cualquier tecla vuelve", off, history))
 	}
@@ -209,13 +268,19 @@ func (m *Model) sidebar() string {
 			"n / p  siguiente / anterior",
 			"1-9  ir a la pestaña",
 			"r  renombrar pestaña",
-			"x  cerrar pestaña",
+			"x  cerrar panel o pestaña",
+			"|  dividir a la derecha",
+			"-  dividir hacia abajo",
+			"o  siguiente panel",
+			"/  buscar en el historial",
 			pfx + "  enviarlo al shell",
 			"",
 			st.label.Render("Historial"),
 			"",
 			"Shift+PgUp / Shift+PgDn",
 			"o la rueda del mouse.",
+			"Prefijo + / busca texto;",
+			"↑/↓ salta entre resultados.",
 			"",
 			st.label.Render("Copiar"),
 			"",
@@ -234,11 +299,37 @@ func (m *Model) sidebar() string {
 	line := func(k, v string) string {
 		return st.label.Render(k) + "\n" + st.value.Render(truncLeft(v, w)) + "\n"
 	}
-	return line("Pestaña", fmt.Sprintf("%d de %d", m.ws.ActiveIndex()+1, m.ws.Len())) +
+	tabInfo := fmt.Sprintf("%d de %d", m.ws.ActiveIndex()+1, m.ws.Len())
+	if n := m.ws.PaneCount(); n > 1 {
+		tabInfo += fmt.Sprintf(" · %d paneles", n)
+	}
+	return line("Pestaña", tabInfo) +
 		line("Shell", m.opts.ShellPath) +
 		line("PID", fmt.Sprint(m.sess.Pid())) +
 		line("Tamaño", fmt.Sprintf("%dx%d", cols, rows)) +
 		line("Directorio", m.cwd)
+}
+
+// split divides the focused pane, side by side when right is set.
+func (m *Model) split(right bool) tea.Cmd {
+	var err error
+	m.changeFocus(func() { err = m.ws.Split(right) })
+	switch {
+	case errors.Is(err, workspace.ErrNoRoom):
+		return m.setFlash("No hay espacio para dividir este panel")
+	case err != nil:
+		return m.setFlash("No se pudo dividir el panel: " + err.Error())
+	}
+	return nil
+}
+
+// changeFocus runs a pane focus change and drops the old pane's selection.
+func (m *Model) changeFocus(change func()) {
+	m.selecting = false
+	m.sess.ClearSelection()
+	change()
+	m.sess = m.ws.Active()
+	m.cwd = m.sess.Cwd()
 }
 
 // switchTab runs a tab change and drops any in-progress mouse selection.
@@ -248,6 +339,9 @@ func (m *Model) switchTab(change func()) {
 	}
 	if m.confirmClose {
 		m.endClose(false)
+	}
+	if m.searching {
+		m.endSearch(false)
 	}
 	m.selecting = false
 	m.sess.ClearSelection()

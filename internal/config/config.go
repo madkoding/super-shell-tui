@@ -29,6 +29,9 @@ type Config struct {
 	Scrollback int `toml:"scrollback"`
 	// RestoreTabs reopens the previous run's tabs (directory and name).
 	RestoreTabs bool `toml:"restore_tabs"`
+	// RestoreCommand is what to do with the program each restored tab was
+	// running: "off", "type" (left at the prompt) or "run".
+	RestoreCommand string `toml:"restore_command"`
 	// Colors are hex values ("#9D7CFF"); empty keeps the adaptive defaults.
 	Colors Colors `toml:"colors"`
 }
@@ -47,6 +50,8 @@ func Default() Config {
 		SidebarWidth: 30,
 		Scrollback:   10000,
 		RestoreTabs:  true,
+
+		RestoreCommand: "type",
 	}
 }
 
@@ -101,6 +106,11 @@ func (c Config) Validate() error {
 	if c.Scrollback < 1 || c.Scrollback > 100000 {
 		return fmt.Errorf("scrollback must be between 1 and 100000, got %d", c.Scrollback)
 	}
+	switch c.RestoreCommand {
+	case "off", "type", "run":
+	default:
+		return fmt.Errorf("restore_command must be \"off\", \"type\" or \"run\", got %q", c.RestoreCommand)
+	}
 	for name, v := range map[string]string{"colors.accent": c.Colors.Accent, "colors.muted": c.Colors.Muted} {
 		if v != "" && !hexColor.MatchString(v) {
 			return fmt.Errorf("%s must be a hex color like #9D7CFF, got %q", name, v)
@@ -145,6 +155,11 @@ scrollback = 10000
 
 # Reopen the previous run's tabs (directory and name) on start.
 restore_tabs = true
+
+# Program a restored tab was running when you quit (e.g. a dev server):
+# "type" leaves it at the prompt for you to press Enter, "run" runs it,
+# "off" ignores it.
+restore_command = "type"
 
 [colors]
 # Hex colors; leave empty for the defaults that adapt to light/dark terminals.

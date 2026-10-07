@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -16,19 +15,25 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/vt"
 	"github.com/creack/pty"
+	"golang.org/x/sys/unix"
 )
+
+// cwdTTL is how long a looked-up working directory is reused.
+const cwdTTL = 500 * time.Millisecond
 
 // Session is a shell process attached to a PTY plus its emulated screen.
 type Session struct {
 	cmd *exec.Cmd
 	pty *os.File
 
-	mu         sync.Mutex // guards emu, cols, rows, scroll, title
+	mu         sync.Mutex // guards emu, cols, rows, scroll, title, sel and search
 	emu        *vt.Emulator
 	cols, rows int
 	scroll     int // lines scrolled back into history; 0 = live view
 	title      string
 	sel        selection
+	searching  bool // a search is in progress; found is its current match
+	found      point
 
 	appCursor     atomic.Bool
 	bracketed     atomic.Bool
@@ -38,6 +43,10 @@ type Session struct {
 	mouseSGR      atomic.Bool
 	outputs       atomic.Uint64 // chunks read from the shell, for activity marks
 	resizedAt     atomic.Int64  // unix nanos of the last effective resize
+
+	cwdMu sync.Mutex // guards cwd and cwdAt
+	cwd   string
+	cwdAt time.Time
 
 	updates chan struct{}
 	done    chan struct{}
@@ -190,8 +199,25 @@ func (s *Session) Resize(cols, rows int) error {
 	s.scroll = min(s.scroll, s.emu.ScrollbackLen())
 	s.mu.Unlock()
 
-	err := pty.Setsize(s.pty, &pty.Winsize{Cols: uint16(cols), Rows: uint16(rows)})
+	err := s.setWinsize(cols, rows)
 	s.notify()
+	return err
+}
+
+// setWinsize resizes the PTY, which sends SIGWINCH to the shell. It goes
+// through SyscallConn rather than pty.Setsize: File.Fd would race with Close
+// and switch the PTY to blocking mode.
+func (s *Session) setWinsize(cols, rows int) error {
+	conn, err := s.pty.SyscallConn()
+	if err != nil {
+		return err
+	}
+	cerr := conn.Control(func(fd uintptr) {
+		err = unix.IoctlSetWinsize(int(fd), unix.TIOCSWINSZ, &unix.Winsize{Col: uint16(cols), Row: uint16(rows)})
+	})
+	if cerr != nil {
+		return cerr
+	}
 	return err
 }
 
@@ -212,13 +238,17 @@ func (s *Session) Title() string {
 	return s.title
 }
 
-// Cwd returns the shell's working directory (Linux only, best effort).
+// Cwd returns the shell's working directory (best effort, "" if unknown).
+// The lookup can be slow on some systems (macOS runs lsof), so the value is
+// cached briefly: it is read on every redraw for tab titles.
 func (s *Session) Cwd() string {
-	dir, err := os.Readlink("/proc/" + strconv.Itoa(s.Pid()) + "/cwd")
-	if err != nil {
-		return ""
+	s.cwdMu.Lock()
+	defer s.cwdMu.Unlock()
+	if time.Since(s.cwdAt) < cwdTTL {
+		return s.cwd
 	}
-	return dir
+	s.cwd, s.cwdAt = processCwd(s.Pid()), time.Now()
+	return s.cwd
 }
 
 // ScrollBy moves the view n lines back into history (negative goes forward).
