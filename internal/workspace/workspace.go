@@ -158,7 +158,7 @@ func (w *Workspace) restoreTab(layout *SavedPane, name string, replay Replay) er
 	w.active = len(w.tabs) - 1
 	w.mu.Unlock()
 	for _, s := range started {
-		go w.watch(t, s)
+		go w.watch(s)
 	}
 	w.relayout(t)
 	w.notify()
@@ -218,14 +218,15 @@ func (w *Workspace) NewTabAt(dir, name string) error {
 	w.active = len(w.tabs) - 1
 	w.mu.Unlock()
 
-	go w.watch(t, sess)
+	go w.watch(sess)
 	w.notify()
 	return nil
 }
 
 // watch forwards a pane's screen updates and removes the pane when its
-// shell exits; the tab goes away with its last pane.
-func (w *Workspace) watch(t *tab, sess *shell.Session) {
+// shell exits; the tab goes away with its last pane. The pane's tab is
+// looked up each time, since a pane can move to another tab.
+func (w *Workspace) watch(sess *shell.Session) {
 	seen := sess.Outputs()
 	for {
 		select {
@@ -233,7 +234,7 @@ func (w *Workspace) watch(t *tab, sess *shell.Session) {
 			out := sess.Outputs()
 			w.mu.Lock()
 			redraw := sess.SinceResize() < resizeQuiet
-			if out != seen && !redraw && w.indexOf(t) != w.active {
+			if t := w.tabOf(sess); t != nil && out != seen && !redraw && w.indexOf(t) != w.active {
 				t.activity = true
 			}
 			seen = out
@@ -241,9 +242,14 @@ func (w *Workspace) watch(t *tab, sess *shell.Session) {
 			w.notify()
 		case <-sess.Done():
 			w.mu.Lock()
-			if leaf := t.root.find(sess); leaf != nil {
-				t.root = remove(t.root, leaf)
+			t := w.tabOf(sess)
+			if t == nil { // Close is tearing everything down
+				w.mu.Unlock()
+				_ = sess.Close()
+				w.notify()
+				return
 			}
+			t.root = remove(t.root, t.root.find(sess))
 			remaining := t.root != nil
 			unzoom(t)
 			if remaining && t.focus == sess {
@@ -264,6 +270,16 @@ func (w *Workspace) watch(t *tab, sess *shell.Session) {
 			return
 		}
 	}
+}
+
+// tabOf returns the tab holding s, or nil. Caller holds w.mu.
+func (w *Workspace) tabOf(s *shell.Session) *tab {
+	for _, t := range w.tabs {
+		if t.root.find(s) != nil {
+			return t
+		}
+	}
+	return nil
 }
 
 func (w *Workspace) indexOf(t *tab) int {

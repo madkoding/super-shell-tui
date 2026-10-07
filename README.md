@@ -81,6 +81,7 @@ que indica el archivo y la clave.
 | `Ctrl+] ←↑→↓` (o `H` `J` `K` `L`) | Mover el borde del panel activo |
 | `Ctrl+] {` / `Ctrl+] }` | Intercambiar el panel con el anterior / siguiente |
 | `Ctrl+] =`   | Repartir el área en paneles del mismo tamaño |
+| `Ctrl+] !`   | Mover el panel activo a una pestaña nueva |
 | `Ctrl+] z`   | Zoom: el panel activo ocupa toda el área (otra vez para volver) |
 | `Ctrl+] /`   | Buscar en el historial       |
 | `Ctrl+] Ctrl+]` | Enviar `Ctrl+]` al shell  |
@@ -95,7 +96,7 @@ split_down = "b"
 
 Acciones: `quit`, `toggle_sidebar`, `help`, `new_tab`, `next_tab`,
 `prev_tab`, `rename_tab`, `close`, `search`, `split_right`, `split_down`,
-`next_pane`, `zoom`, `equalize`, `swap_next`, `swap_prev`, `focus_left`,
+`next_pane`, `zoom`, `break_pane`, `equalize`, `swap_next`, `swap_prev`, `focus_left`,
 `focus_down`, `focus_up`, `focus_right`. Los dígitos y `H` `J` `K` `L` están
 reservados; la ayuda (`?`) muestra las teclas configuradas.
 

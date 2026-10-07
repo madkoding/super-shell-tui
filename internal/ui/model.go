@@ -167,6 +167,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.ws.SwapPane(input.Action(msg) == input.ActionSwapPanePrev)
 		case input.ActionEqualizePanes:
 			m.ws.EqualizePanes()
+		case input.ActionBreakPane:
+			var err error
+			m.switchTab(func() { err = m.ws.BreakPane() })
+			switch {
+			case errors.Is(err, workspace.ErrSinglePane):
+				return m, m.setFlash("La pestaña tiene un solo panel")
+			case err != nil:
+				return m, m.setFlash("No se pudo mover el panel: " + err.Error())
+			}
 		case input.ActionZoomPane:
 			if m.ws.PaneCount() < 2 {
 				return m, m.setFlash("El zoom necesita al menos dos paneles (" + m.opts.PrefixLabel + " " + m.key(input.ActionSplitRight) + " para dividir)")
@@ -305,11 +314,11 @@ func (m *Model) View() string {
 		status = bar(st.armed, "Tamaño: flechas o H/J/K/L mueven el borde · Enter/Esc o cualquier otra tecla terminan")
 	} else if m.prefixArmed {
 		k := m.key
-		status = bar(st.armed, fmt.Sprintf("%[1]s … %s  ayuda · %s  nueva · %s  cerrar · %s/%s  cambiar · 1-9  ir · %s  renombrar · %s  buscar · %s/%s  dividir · %s/%s%s%s%s  panel · %s  zoom · %s  igualar · %s/%s  mover · flechas  tamaño · %s  panel · %s  salir · %[1]s  enviar %[1]s",
+		status = bar(st.armed, fmt.Sprintf("%[1]s … %s  ayuda · %s  nueva · %s  cerrar · %s/%s  cambiar · 1-9  ir · %s  renombrar · %s  buscar · %s/%s  dividir · %s/%s%s%s%s  panel · %s  zoom · %s  a pestaña · %s  igualar · %s/%s  mover · flechas  tamaño · %s  panel · %s  salir · %[1]s  enviar %[1]s",
 			pfx, k(input.ActionToggleHelp), k(input.ActionNewTab), k(input.ActionCloseTab), k(input.ActionNextTab), k(input.ActionPrevTab),
 			k(input.ActionRenameTab), k(input.ActionSearch), k(input.ActionSplitRight), k(input.ActionSplitDown),
 			k(input.ActionNextPane), k(input.ActionFocusLeft), k(input.ActionFocusDown), k(input.ActionFocusUp), k(input.ActionFocusRight),
-			k(input.ActionZoomPane), k(input.ActionEqualizePanes), k(input.ActionSwapPanePrev), k(input.ActionSwapPaneNext),
+			k(input.ActionZoomPane), k(input.ActionBreakPane), k(input.ActionEqualizePanes), k(input.ActionSwapPanePrev), k(input.ActionSwapPaneNext),
 			k(input.ActionToggleSidebar), k(input.ActionQuit)))
 	} else if off, history := m.sess.ScrollOffset(); off > 0 {
 		status = bar(st.scroll, fmt.Sprintf("Historial: %d/%d líneas arriba · Shift+PgDn bajar · cualquier tecla vuelve", off, history))
@@ -345,6 +354,7 @@ func (m *Model) sidebar() string {
 			k(input.ActionNextPane) + "  siguiente panel",
 			k(input.ActionFocusLeft) + " " + k(input.ActionFocusDown) + " " + k(input.ActionFocusUp) + " " + k(input.ActionFocusRight) + "  panel en esa dirección",
 			k(input.ActionZoomPane) + "  zoom del panel",
+			k(input.ActionBreakPane) + "  panel a pestaña nueva",
 			k(input.ActionEqualizePanes) + "  paneles del mismo tamaño",
 			k(input.ActionSwapPanePrev) + " " + k(input.ActionSwapPaneNext) + "  mover el panel",
 			"flechas  cambiar tamaño",

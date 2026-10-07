@@ -184,7 +184,7 @@ muted = ""
 # character; digits and H/J/K/L are reserved). The new key replaces the
 # old ones. Actions: quit, toggle_sidebar, help, new_tab, next_tab,
 # prev_tab, rename_tab, close, search, split_right, split_down, next_pane,
-# zoom, equalize, swap_next, swap_prev, focus_left, focus_down, focus_up,
+# zoom, break_pane, equalize, swap_next, swap_prev, focus_left, focus_down, focus_up,
 # focus_right.
 # split_right = "v"
 # split_down = "b"

@@ -252,6 +252,37 @@ func TestSwapPane(t *testing.T) {
 	waitFor(t, func() bool { c, _ := left.Size(); return c == 18 })
 }
 
+func TestBreakPane(t *testing.T) {
+	w, err := New("/bin/sh", 100, 40, 10)
+	if err != nil {
+		t.Skip("no /bin/sh:", err)
+	}
+	defer w.Close()
+	if err := w.BreakPane(); err != ErrSinglePane {
+		t.Fatalf("a lone pane should stay, got %v", err)
+	}
+	first := w.Active()
+	if err := w.Split(true); err != nil {
+		t.Fatal(err)
+	}
+	moved := w.Active()
+	if err := w.BreakPane(); err != nil {
+		t.Fatal(err)
+	}
+	if w.Len() != 2 || w.ActiveIndex() != 1 || w.Active() != moved || w.PaneCount() != 1 {
+		t.Fatalf("len %d active %d panes %d", w.Len(), w.ActiveIndex(), w.PaneCount())
+	}
+	waitFor(t, func() bool { c, _ := moved.Size(); return c == 38 })
+	waitFor(t, func() bool { c, _ := first.Size(); return c == 38 })
+
+	// The moved shell still closes its new tab when it exits.
+	_, _ = w.Write([]byte("exit\n"))
+	waitFor(t, func() bool { return w.Len() == 1 })
+	if w.Active() != first {
+		t.Fatal("the first tab should be active again")
+	}
+}
+
 func TestResizePanes(t *testing.T) {
 	w, err := New("/bin/sh", 100, 40, 10)
 	if err != nil {

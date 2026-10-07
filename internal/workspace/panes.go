@@ -244,7 +244,7 @@ func (w *Workspace) Split(vertical bool) error {
 	t.focus = sess
 	w.mu.Unlock()
 
-	go w.watch(t, sess)
+	go w.watch(sess)
 	w.relayout(t)
 	w.notify()
 	return nil
@@ -360,4 +360,38 @@ func (w *Workspace) SwapPane(back bool) {
 	w.mu.Unlock()
 	w.relayout(t)
 	w.notify()
+}
+
+// ErrSinglePane is returned by BreakPane on a tab with one pane.
+var ErrSinglePane = errors.New("the tab has a single pane")
+
+// BreakPane moves the focused pane of the active tab to a new tab of its
+// own and activates it; the shell keeps running.
+func (w *Workspace) BreakPane() error {
+	w.mu.Lock()
+	if len(w.tabs) == 0 {
+		w.mu.Unlock()
+		return nil
+	}
+	t := w.tabs[w.active]
+	if t.root.sess != nil {
+		w.mu.Unlock()
+		return ErrSinglePane
+	}
+	if len(w.tabs) >= MaxTabs {
+		w.mu.Unlock()
+		return ErrTooManyTabs
+	}
+	sess := t.focus
+	t.root = remove(t.root, t.root.find(sess))
+	unzoom(t)
+	t.focus = t.root.first().sess
+	moved := &tab{root: &node{sess: sess}, focus: sess}
+	w.tabs = append(w.tabs, moved)
+	w.active = len(w.tabs) - 1
+	w.mu.Unlock()
+	w.relayout(t)
+	w.relayout(moved)
+	w.notify()
+	return nil
 }
