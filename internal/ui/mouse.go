@@ -41,6 +41,12 @@ func (m *Model) handleMouse(ev input.MouseEvent) tea.Cmd {
 		return nil
 	}
 
+	// The wheel over the sidebar scrolls it when it doesn't fit.
+	if w := ev.Wheel(); w != 0 && m.showSidebar && ev.Y > 0 && ev.X < m.opts.SidebarWidth+2 && m.dragging == nil {
+		m.sideScroll += w * wheelLines // fitSidebar clamps it
+		return nil
+	}
+
 	// Dragging a border between panes resizes them.
 	ox, oy := m.areaOrigin()
 	if m.dragging != nil {
