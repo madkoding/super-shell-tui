@@ -49,6 +49,7 @@ type Model struct {
 	width, height int
 	showSidebar   bool
 	showHelp      bool
+	sideScroll    int // first sidebar line shown when it is taller than the screen
 	prefixArmed   bool
 	resizeMode    bool // arrows and H/J/K/L resize until another key
 	cwd           string
@@ -194,6 +195,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.resizeShell()
 		case input.ActionToggleHelp:
 			m.showHelp = !m.showHelp
+			m.sideScroll = 0
 			if m.showHelp && !m.showSidebar {
 				m.showSidebar = true
 				m.resizeShell()
@@ -293,7 +295,7 @@ func (m *Model) View() string {
 	pane := m.renderPanes()
 	body := pane
 	if m.showSidebar {
-		side := st.sidebar.Width(m.opts.SidebarWidth).Height(height - 2).Render(m.sidebar())
+		side := st.sidebar.Width(m.opts.SidebarWidth).Height(height - 2).Render(m.fitSidebar(m.sidebar(), height-2))
 		body = lipgloss.JoinHorizontal(lipgloss.Top, side, pane)
 	}
 
@@ -410,6 +412,29 @@ func (m *Model) sidebar() string {
 		line("PID", fmt.Sprint(m.sess.Pid())) +
 		line("Tamaño", fmt.Sprintf("%dx%d", cols, rows)) +
 		line("Directorio", m.cwd)
+}
+
+// fitSidebar wraps text to the sidebar and keeps rows lines of it, from
+// sideScroll on, so a long help never pushes the screen up. Hidden lines are
+// marked with arrows; the wheel over the sidebar scrolls them into view.
+func (m *Model) fitSidebar(text string, rows int) string {
+	w := m.opts.SidebarWidth - 2 // padding
+	lines := strings.Split(lipgloss.NewStyle().Width(w).Render(text), "\n")
+	if rows < 1 || len(lines) <= rows {
+		m.sideScroll = 0
+		return text
+	}
+	total := len(lines)
+	m.sideScroll = max(0, min(m.sideScroll, total-rows))
+	lines = lines[m.sideScroll : m.sideScroll+rows]
+	more := m.styles.value.Render
+	if m.sideScroll > 0 {
+		lines[0] = more("▲ rueda: ver más")
+	}
+	if m.sideScroll+rows < total {
+		lines[rows-1] = more("▼ rueda: ver más")
+	}
+	return strings.Join(lines, "\n")
 }
 
 // split divides the focused pane, side by side when right is set.
