@@ -11,6 +11,8 @@ lateral de información y la sesión guardada al salir.
 *Pestaña `código` con tres paneles: `git log`, uno renombrado `tests` y un
 servidor cuyo borde muestra el programa que corre (`python3`).*
 
+![Dividir, nombrar un panel y hacer zoom](docs/demo.gif)
+
 ## Instalación
 
 Binarios para Linux y macOS (amd64 y arm64) en
@@ -197,5 +199,12 @@ mouse sobre el panel la desplaza.
 ## Tests
 
 ```sh
-go test ./...
+make test          # go vet + go test -race
 ```
+
+## Capturas
+
+`make screenshot` regenera `docs/screenshot.png` y `docs/demo.gif` usando la
+app real dentro de tmux (ver `scripts/screenshot/run.sh`). Necesita `tmux`,
+`python3`, `ffmpeg` y Node con el paquete `playwright` (o `CHROMIUM` apuntando
+a un Chrome/Chromium).
