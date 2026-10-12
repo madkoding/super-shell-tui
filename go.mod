@@ -1,6 +1,6 @@
 module github.com/madkoding/super-shell-tui
 
-go 1.24.7
+go 1.26.0
 
 require (
 	github.com/BurntSushi/toml v1.6.0
@@ -10,8 +10,8 @@ require (
 	github.com/charmbracelet/x/ansi v0.11.7
 	github.com/charmbracelet/x/vt v0.0.0-20261004011457-ad85c59fdf4e
 	github.com/creack/pty v1.1.24
-	golang.org/x/sys v0.41.0
-	golang.org/x/term v0.30.0
+	golang.org/x/sys v0.48.0
+	golang.org/x/term v0.46.0
 )
 
 require (
